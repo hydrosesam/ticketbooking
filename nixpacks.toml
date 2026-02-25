@@ -1,5 +1,5 @@
 [providers.node]
-nodeVersion = "18"
+nodeVersion = "22"
 
 [phases.setup]
 nixPkgs = ["...", "chromium", "nss", "freetype", "harfbuzz", "pango"]

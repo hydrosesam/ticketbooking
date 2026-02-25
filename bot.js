@@ -283,7 +283,7 @@ async function handleMusicNightFlow(phone, event) {
                     responseType: 'arraybuffer'
                 });
 
-                const ext = message.image ? 'jpg' : 'pdf';
+                const ext = event.image ? 'jpg' : 'pdf';
                 const fileName = `slip_${mediaObj.id}.${ext}`;
                 localPath = path.join(__dirname, 'uploads', fileName);
                 fs.writeFileSync(localPath, fileRes.data);
@@ -425,16 +425,17 @@ async function authorizeAndSendTicket(bookingNo) {
             members: safeJsonParse(b.members)
         };
 
-        // Notify user
-        await sendText(phone, "✅ *Payment Verified!*\n\nYour Muscat Star Night 2026 ticket is being generated...");
-
         // Generate PDF
+        console.log(`[AUTH] Generating PDF for ${bookingNo}...`);
         const pdfBuffer = await generateTicketPDF(bookingData);
+        if (!pdfBuffer) throw new Error("PDF Buffer is empty");
+
         const fileName = `ticket_${b.ticket_id}.pdf`;
         const filePath = path.join(__dirname, fileName);
         fs.writeFileSync(filePath, pdfBuffer);
 
         // Upload to Meta
+        console.log(`[AUTH] Uploading PDF to Meta for ${bookingNo}...`);
         const form = new (require('form-data'))();
         form.append('file', fs.createReadStream(filePath));
         form.append('messaging_product', 'whatsapp');
@@ -446,8 +447,10 @@ async function authorizeAndSendTicket(bookingNo) {
         );
 
         const mediaId = mediaRes.data.id;
+        if (!mediaId) throw new Error("Failed to get media ID from Meta");
 
         // Send Document
+        console.log(`[AUTH] Sending Document to customer for ${bookingNo}...`);
         await sendWhatsAppMessage(phone, {
             type: "document",
             document: {
@@ -457,10 +460,11 @@ async function authorizeAndSendTicket(bookingNo) {
         });
 
         fs.unlinkSync(filePath);
+        console.log(`✅ [AUTH] Success for ${bookingNo}`);
         return { success: true };
 
     } catch (err) {
-        console.error("Authorization failed:", err);
+        console.error("❌ Authorization failed:", err);
         return { success: false, error: err.message };
     }
 }
