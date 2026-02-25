@@ -315,7 +315,7 @@ app.get('/dashboard', requireAuth, async (req, res) => {
 app.get('/verify', requireAuth, (req, res) => {
     // Main Scanner UI
     res.send(`
-            < !DOCTYPE html >
+            <!DOCTYPE html>
                 <html lang="en">
                     <head>
                         <meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1">
@@ -324,7 +324,7 @@ app.get('/verify', requireAuth, (req, res) => {
                                 <script src="https://unpkg.com/html5-qrcode" type="text/javascript"></script>
                                 <style>
                                     :root {--primary: #1a237e; --success: #2e7d32; --warning: #ff6d00; --bg: #f4f7fa; }
-                                    body {font - family: 'Outfit', sans-serif; background: var(--bg); margin: 0; padding: 10px; display: flex; flex-direction: column; align-items: center; min-height: 100vh; }
+                                    body {font-family: 'Outfit', sans-serif; background: var(--bg); margin: 0; padding: 10px; display: flex; flex-direction: column; align-items: center; min-height: 100vh; }
                                     .nav-bar {width: 100%; max-width: 450px; display: flex; justify-content: space-between; align-items: center; margin-bottom: 10px; }
                                     .nav-bar a {color: #e74c3c; font-weight: bold; text-decoration: none; font-size: 14px; }
                                     .card {background: white; border-radius: 28px; box-shadow: 0 15px 50px rgba(0,0,0,0.1); width: 100%; max-width: 450px; overflow: hidden; position:relative; display: none; }
@@ -338,17 +338,17 @@ app.get('/verify', requireAuth, (req, res) => {
                                     #reader {width: 100%; flex: 1; }
                                     .q-grid {display: grid; grid-template-columns: 1fr 1fr; gap: 15px; margin-bottom: 25px; }
                                     .q-box {background: #f8faff; padding: 18px; border-radius: 20px; text-align: center; border: 1px solid #e3e9ff; }
-                                    .q-val {font - size: 32px; font-weight: 800; color: var(--primary); display: block; }
-                                    .q-label {font - size: 11px; color: #78909c; text-transform: uppercase; }
+                                    .q-val {font-size: 32px; font-weight: 800; color: var(--primary); display: block; }
+                                    .q-label {font-size: 11px; color: #78909c; text-transform: uppercase; }
                                     .item {display: flex; justify-content: space-between; padding: 15px 5px; border-bottom: 1px solid #eee; }
                                     .item span:first-child {color: #90a4ae; font-size: 14px; }
-                                    .item span:last-child {font - weight: 700; color: #333; }
+                                    .item span:last-child {font-weight: 700; color: #333; }
                                     .members {background: #f0f4ff; padding: 15px; border-radius: 18px; margin-top: 15px; }
                                     .chip {display: inline-block; background: white; color: var(--primary); padding: 6px 14px; border-radius: 12px; font-size: 13px; margin: 4px; font-weight: 600; box-shadow: 0 2px 5px rgba(0,0,0,0.05); }
                                     .already-scanned-box {background: #fff3e0; border: 2px solid var(--warning); padding: 20px; border-radius: 20px; color: #e65100; margin-top: 15px; text-align: center; }
                                     #confetti-overlay {position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: rgba(46, 125, 50, 0.95); z-index: 9999; display: none; flex-direction: column; justify-content: center; align-items: center; color: white; text-align: center; }
                                     .success-circle {width: 100px; height: 100px; border-radius: 50%; background: white; color: #2e7d32; display: flex; justify-content: center; align-items: center; font-size: 50px; margin-bottom: 20px; animation: pop 0.5s cubic-bezier(0.175, 0.885, 0.32, 1.275); }
-                                    @keyframes pop {0 % { transform: scale(0); } 100% {transform: scale(1); } }
+                                    @keyframes pop {0% { transform: scale(0); } 100% {transform: scale(1); } }
                                 </style>
                             </head>
                             <body>
@@ -367,8 +367,9 @@ app.get('/verify', requireAuth, (req, res) => {
                                 <!-- Scanner Camera -->
                                 <div id="scanner-overlay">
                                     <div id="reader"></div>
+                                    <div id="scanner-error" style="background:#ff5252; color:white; padding:10px; font-size:12px; display:none; text-align:center;"></div>
                                     <div style="padding: 20px; background: #000; text-align: center; display:flex; justify-content:space-between; align-items:center;">
-                                        <button onclick="document.getElementById('scanner-overlay').style.display='none'; document.getElementById('result-card').style.display='block';" style="background:#444; color:white; border:none; padding:10px 15px; border-radius:8px;">Cancel</button>
+                                        <button onclick="stopScanner();" style="background:#444; color:white; border:none; padding:10px 15px; border-radius:8px;">Cancel</button>
                                         <p style="color:#aaa; font-size:12px; margin:0;">Target QR within frame</p>
                                         <div style="width:60px;"></div>
                                     </div>
@@ -419,38 +420,64 @@ app.get('/verify', requireAuth, (req, res) => {
                                     return urlParams.get(param);
                 }
 
+                                    function stopScanner() {
+                                        if (html5QrCode) {
+                                            html5QrCode.stop().catch(err => console.error("Error stopping scanner", err));
+                                        }
+                                        document.getElementById('scanner-overlay').style.display = 'none';
+                                        document.getElementById('result-card').style.display = 'block';
+                                    }
+
                                     function startScanner() {
+                                        const errDiv = document.getElementById('scanner-error');
+                                        errDiv.style.display = 'none';
                                         document.getElementById('confetti-overlay').style.display = 'none';
-                                    document.getElementById('result-card').style.display = 'none';
-                                    document.getElementById('scanner-overlay').style.display = 'flex';
+                                        document.getElementById('result-card').style.display = 'none';
+                                        document.getElementById('scanner-overlay').style.display = 'flex';
 
-                                    if (!html5QrCode) {
-                                        html5QrCode = new Html5Qrcode("reader");
-                    }
+                                        if (!html5QrCode) {
+                                            html5QrCode = new Html5Qrcode("reader");
+                                        }
 
-                                    const config = {fps: 10, qrbox: {width: 250, height: 250 } };
-                                    html5QrCode.start({facingMode: "environment" }, config, async (decodedText) => {
-                        try {
-                            const url = new URL(decodedText);
-                                    const tId = url.searchParams.get("id");
-                                    if (tId) {
-                                        html5QrCode.stop().then(() => {
-                                            document.getElementById('scanner-overlay').style.display = 'none';
-                                            processTicket(tId);
+                                        const config = {fps: 10, qrbox: {width: 250, height: 250 } };
+                                        html5QrCode.start(
+                                            {facingMode: "environment" }, 
+                                            config, 
+                                            async (decodedText) => {
+                                                try {
+                                                    const url = new URL(decodedText);
+                                                    const tId = url.searchParams.get("id");
+                                                    if (tId) {
+                                                        html5QrCode.stop().then(() => {
+                                                            document.getElementById('scanner-overlay').style.display = 'none';
+                                                            processTicket(tId);
+                                                        });
+                                                    } else {
+                                                        alert("Invalid Ticket Format");
+                                                    }
+                                                } catch(e) {
+                                                    html5QrCode.stop().then(() => {
+                                                        document.getElementById('scanner-overlay').style.display = 'none';
+                                                        processTicket(decodedText);
+                                                    });
+                                                }
+                                            },
+                                            (error) => {
+                                                // Only log critical/new errors to the screen
+                                                if(error.includes('Permission')) {
+                                                    errDiv.style.display = 'block';
+                                                    errDiv.innerText = "Error: Camera Permission Denied";
+                                                } else if (error.includes('NotFound')) {
+                                                    errDiv.style.display = 'block';
+                                                    errDiv.innerText = "Error: No rear camera found";
+                                                }
+                                            }
+                                        ).catch(err => {
+                                            errDiv.style.display = 'block';
+                                            errDiv.innerText = "Scanner Error: " + err;
+                                            console.error(err);
                                         });
-                            } else {
-                                        alert("Invalid Ticket Format");
-                            }
-                        } catch(e) {
-                                        // Handle raw ticket ID if they don't use full URL
-                                        html5QrCode.stop().then(() => {
-                                            document.getElementById('scanner-overlay').style.display = 'none';
-                                            processTicket(decodedText);
-                                        });
-                        }
-                    });
-                }
-
+                                    }
                                     async function processTicket(tId) {
                     try {
                         const response = await fetch('/verify/scan', {
