@@ -2,7 +2,7 @@ const axios = require('axios');
 const fs = require('fs');
 const path = require('path');
 const db = require('./database');
-const { generateTicketPDF } = require('./pdf_generator');
+const { generateTicketPDF, generateQRCode } = require('./pdf_generator');
 
 const WHATSAPP_ACCESS_TOKEN = process.env.WHATSAPP_ACCESS_TOKEN || 'EAAdPlcYFproBQLR1YAW2X176hNT7bHwfKIWhZCBlbH5b3BChXhah9gViOQLZBwycsCuSUuqN8gzJZA9vZBBCcRZBXZBdZCk8zHwuIsLnuS3k5HFnqSPeIZCZC0kSBWGTNisu6DLYWZA8LjIuAfnBkU5E9aQiQJVczG3naqaCi1siCPTj8UBENXZBNmEptcw4yupBUtFyQZDZD';
 const PHONE_NUMBER_ID = process.env.WHATSAPP_PHONE_NUMBER_ID || '658261390699917';
@@ -452,7 +452,10 @@ async function authorizeAndSendTicket(bookingNo) {
         // Upload to Meta
         console.log(`[AUTH] Uploading PDF to Meta for ${bookingNo}...`);
         const form = new (require('form-data'))();
-        form.append('file', fs.createReadStream(filePath));
+        form.append('file', fs.createReadStream(filePath), {
+            filename: `Muscat_Star_Night_Ticket_${b.booking_no}.pdf`,
+            contentType: 'application/pdf'
+        });
         form.append('messaging_product', 'whatsapp');
 
         const mediaRes = await axios.post(
@@ -475,6 +478,32 @@ async function authorizeAndSendTicket(bookingNo) {
         });
 
         fs.unlinkSync(filePath);
+
+        // --- NEW: Generate and Send QR Code Separately ---
+        console.log(`[AUTH] Sending separate QR code for ${bookingNo}...`);
+        const qrBase64 = await generateQRCode(`https://eventz.cloud/verify?id=${b.ticket_id}`);
+        if (qrBase64) {
+            const qrBuffer = Buffer.from(qrBase64.replace(/^data:image\/png;base64,/, ''), 'base64');
+            const qrPath = path.join(__dirname, `qr_${b.ticket_id}.png`);
+            fs.writeFileSync(qrPath, qrBuffer);
+
+            const qrForm = new (require('form-data'))();
+            qrForm.append('file', fs.createReadStream(qrPath), { filename: 'Ticket_QR_Code.png', contentType: 'image/png' });
+            qrForm.append('messaging_product', 'whatsapp');
+
+            const qrMediaRes = await axios.post(
+                `https://graph.facebook.com/v17.0/${PHONE_NUMBER_ID}/media`,
+                qrForm,
+                { headers: { 'Authorization': `Bearer ${WHATSAPP_ACCESS_TOKEN}`, ...qrForm.getHeaders() } }
+            );
+
+            await sendWhatsAppMessage(phone, {
+                type: "image",
+                image: { id: qrMediaRes.data.id, caption: "📱 Tip: Show this QR code at the entrance for quick scanning!" }
+            });
+            fs.unlinkSync(qrPath);
+        }
+
         console.log(`✅ [AUTH] Success for ${bookingNo}`);
         return { success: true };
 

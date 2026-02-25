@@ -121,4 +121,13 @@ async function generateTicketPDF(bookingData) {
     return pdfBuffer;
 }
 
-module.exports = { generateTicketPDF };
+async function generateQRCode(text) {
+    try {
+        return await QRCode.toDataURL(text, { width: 400, margin: 2, color: { dark: '#000000', light: '#ffffff' } });
+    } catch (err) {
+        console.error("QR Error", err);
+        return null;
+    }
+}
+
+module.exports = { generateTicketPDF, generateQRCode };
