@@ -169,11 +169,11 @@ app.get('/dashboard', requireAuth, async (req, res) => {
         let bookingsHtml = bookingRows.map(b => {
             totalRevenue += parseFloat(b.amount);
             let statusBadge = b.entry_status
-                ?\`<span style="background:#e74c3c; color:white; padding:4px 8px; border-radius:4px; font-size:12px; font-weight:bold;">SCANNED</span>\` 
-                : \`<span style="background:#2ecc71; color:white; padding:4px 8px; border-radius:4px; font-size:12px; font-weight:bold;">UNUSED</span>\`;
-            
+                ? `<span style="background:#e74c3c; color:white; padding:4px 8px; border-radius:4px; font-size:12px; font-weight:bold;">SCANNED</span>`
+                : `<span style="background:#2ecc71; color:white; padding:4px 8px; border-radius:4px; font-size:12px; font-weight:bold;">UNUSED</span>`;
+
             return `
-                    < tr >
+                    <tr>
                     <td>${b.booking_no}</td>
                     <td>${b.phone}</td>
                     <td>${b.category}</td>
@@ -481,38 +481,38 @@ app.get('/verify', requireAuth, (req, res) => {
 
 // The backend API that checks the DB
 app.post('/verify/scan', async (req, res) => {
-    const {ticketId} = req.body;
-                            if (!ticketId) return res.status(400).json({error: 'Missing ticket ID' });
+    const { ticketId } = req.body;
+    if (!ticketId) return res.status(400).json({ error: 'Missing ticket ID' });
 
-                            try {
+    try {
         const rows = await db.query("SELECT * FROM mn_bookings WHERE ticket_id = ?", [ticketId]);
-                            if (rows.length === 0) return res.status(404).json({error: 'Ticket not found in database' });
+        if (rows.length === 0) return res.status(404).json({ error: 'Ticket not found in database' });
 
-                            const ticket = rows[0];
-                            if (ticket.entry_status) {
-            return res.status(200).json({status: 'already_scanned', ticket });
+        const ticket = rows[0];
+        if (ticket.entry_status) {
+            return res.status(200).json({ status: 'already_scanned', ticket });
         } else {
-            return res.status(200).json({status: 'valid', ticket });
+            return res.status(200).json({ status: 'valid', ticket });
         }
     } catch (err) {
-                                console.error('Verify Scan Error:', err);
-                            res.status(500).json({error: 'Internal Server Error' });
+        console.error('Verify Scan Error:', err);
+        res.status(500).json({ error: 'Internal Server Error' });
     }
 });
 
 app.post('/verify/confirm', async (req, res) => {
-    const {ticketId} = req.body;
-                            if (!ticketId) return res.status(400).json({error: 'Missing ticket ID' });
+    const { ticketId } = req.body;
+    if (!ticketId) return res.status(400).json({ error: 'Missing ticket ID' });
 
-                            try {
-        const nowStr = new Date().toLocaleString('en-GB', {timeZone: 'Asia/Muscat' });
-                            const entryMsg = "Checked-In: " + nowStr;
+    try {
+        const nowStr = new Date().toLocaleString('en-GB', { timeZone: 'Asia/Muscat' });
+        const entryMsg = "Checked-In: " + nowStr;
 
-                            await db.query("UPDATE mn_bookings SET entry_status = ? WHERE ticket_id = ?", [entryMsg, ticketId]);
-                            res.status(200).json({success: true });
+        await db.query("UPDATE mn_bookings SET entry_status = ? WHERE ticket_id = ?", [entryMsg, ticketId]);
+        res.status(200).json({ success: true });
     } catch (err) {
-                                console.error('Verify Confirm Error:', err);
-                            res.status(500).json({error: 'Internal Server Error' });
+        console.error('Verify Confirm Error:', err);
+        res.status(500).json({ error: 'Internal Server Error' });
     }
 });
 
@@ -520,6 +520,6 @@ app.post('/verify/confirm', async (req, res) => {
 // Start Server
 // ======================================
 app.listen(PORT, '0.0.0.0', () => {
-                                console.log(`🚀 Node.js Server listening on port ${PORT}`);
-                            console.log(`🔗 Webhook endpoint: http://localhost:${PORT}/webhook`);
+    console.log(`🚀 Node.js Server listening on port ${PORT}`);
+    console.log(`🔗 Webhook endpoint: http://localhost:${PORT}/webhook`);
 });
