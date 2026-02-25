@@ -467,7 +467,7 @@ async function authorizeAndSendTicket(bookingNo) {
         console.log(`[AUTH] Uploading PDF to Meta for ${bookingNo}...`);
         const form = new (require('form-data'))();
         form.append('file', fs.createReadStream(filePath), {
-            filename: `Muscat_Star_Night_Ticket_${b.booking_no}.pdf`,
+            filename: `Ticket No- ${b.booking_no}.pdf`,
             contentType: 'application/pdf'
         });
         form.append('messaging_product', 'whatsapp');
