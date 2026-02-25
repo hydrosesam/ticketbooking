@@ -1,5 +1,6 @@
 const express = require('express');
 const { handleMusicNightFlow } = require('./bot');
+const db = require('./database');
 require('dotenv').config();
 
 const app = express();
