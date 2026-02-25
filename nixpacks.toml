@@ -1,0 +1,9 @@
+[providers.node]
+nodeVersion = "18"
+
+[phases.setup]
+nixPkgs = ["...", "chromium", "nss", "freetype", "harfbuzz", "pango"]
+
+[variables]
+PUPPETEER_SKIP_CHROMIUM_DOWNLOAD = "true"
+PUPPETEER_EXECUTABLE_PATH = "/usr/bin/chromium"
