@@ -105,9 +105,11 @@ async function sendMNCategorySelect(phone) {
     });
 }
 
-async function sendMNQuantityRequest(phone, category) {
+async function sendMNQuantityRequest(phone, category, availableSeats) {
     const rows = [];
-    for (let i = 1; i <= 10; i++) {
+    const maxQty = Math.min(10, availableSeats);
+
+    for (let i = 1; i <= maxQty; i++) {
         rows.push({
             id: "QTY_" + i,
             title: i + " Ticket" + (i > 1 ? "s" : ""),
@@ -119,14 +121,14 @@ async function sendMNQuantityRequest(phone, category) {
         type: "interactive",
         interactive: {
             type: "list",
-            header: { type: "text", text: "Select Quantity" },
-            body: { text: "🎫 How many tickets would you like to book for " + category + "?" },
+            header: { type: "text", text: `Select Quantity (Max ${maxQty})` },
+            body: { text: `🎫 There are ${availableSeats} tickets remaining in ${category}. How many would you like to book?` },
             footer: { text: "Music Night Muscat 2026" },
             action: {
                 button: "Choose Quantity",
                 sections: [
                     {
-                        title: "Number of Tickets",
+                        title: "Available Tickets",
                         rows: rows
                     }
                 ]
@@ -233,9 +235,23 @@ async function handleMusicNightFlow(phone, message) {
         case "MN_CATEGORY_SELECT":
             if (message.startsWith("CAT_")) {
                 const category = message.replace("CAT_", "");
-                await saveTempData(phone, 'category', category);
-                await sendMNQuantityRequest(phone, category);
-                await saveUserState(phone, "MN_QUANTITY_INPUT");
+
+                // --- INVENTORY CHECK ---
+                const invRes = await db.query("SELECT * FROM mn_inventory WHERE category = ?", [category]);
+                if (invRes.length > 0) {
+                    const available = invRes[0].total_seats - invRes[0].booked_seats;
+                    if (available <= 0) {
+                        await sendText(phone, `🚫 Sorry, the ${category} category is completely sold out! Please select another category.`);
+                        await sendMNCategorySelect(phone);
+                        return; // Stop here, keep them in MN_CATEGORY_SELECT state
+                    }
+
+                    await saveTempData(phone, 'category', category);
+                    await sendMNQuantityRequest(phone, category, available);
+                    await saveUserState(phone, "MN_QUANTITY_INPUT");
+                } else {
+                    await sendText(phone, "⚠️ Sorry, we could not retrieve availability for that category. Please try again.");
+                }
             }
             break;
 
@@ -291,6 +307,12 @@ async function processAndSendBooking(phone, user) {
             `INSERT INTO mn_bookings (booking_no, ticket_id, phone, category, quantity, amount, members) 
              VALUES (?, ?, ?, ?, ?, ?, ?)`,
             [bookingNo, ticketId, phone, user.category, user.quantity, totalAmount, JSON.stringify(user.members)]
+        );
+
+        // Deduct from inventory
+        await db.query(
+            `UPDATE mn_inventory SET booked_seats = booked_seats + ? WHERE category = ?`,
+            [user.quantity, user.category]
         );
 
         const bookingData = {

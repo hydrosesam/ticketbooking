@@ -52,6 +52,26 @@ async function initDatabase() {
         `);
         console.log('✅ Checked/Created table: mn_bookings');
 
+        // 3. Create mn_inventory table
+        await connection.query(`
+            CREATE TABLE IF NOT EXISTS mn_inventory (
+                category VARCHAR(20) PRIMARY KEY,
+                total_seats INT NOT NULL DEFAULT 0,
+                booked_seats INT NOT NULL DEFAULT 0
+            )
+        `);
+        console.log('✅ Checked/Created table: mn_inventory');
+
+        // Seed initial capacities (INSERT IGNORE preserves existing data)
+        await connection.query(`
+            INSERT IGNORE INTO mn_inventory (category, total_seats, booked_seats) VALUES
+            ('VVIP', 50, 0),
+            ('VIP', 100, 0),
+            ('GOLD', 200, 0),
+            ('SILVER', 300, 0)
+        `);
+        console.log('✅ Synchronized inventory starting counts.');
+
         connection.release();
     } catch (err) {
         console.error('❌ Failed to initialize database:', err.message);
