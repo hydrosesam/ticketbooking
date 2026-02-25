@@ -487,6 +487,7 @@ async function authorizeAndSendTicket(bookingNo) {
             type: "document",
             document: {
                 id: mediaId,
+                filename: `Ticket No- ${b.booking_no}.pdf`,
                 caption: `🎉 YOUR TICKET IS HERE!\n\nBooking No: ${b.booking_no}\nSee you at Muscat Star Night 2026! 🎶`
             }
         });
