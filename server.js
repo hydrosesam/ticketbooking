@@ -151,154 +151,442 @@ app.get('/dashboard', requireAuth, async (req, res) => {
     try {
         const inventoryRows = await db.query("SELECT * FROM mn_inventory");
         const bookingRows = await db.query("SELECT * FROM mn_bookings ORDER BY timestamp DESC");
+        const verifiedRows = await db.query("SELECT * FROM mn_bookings WHERE entry_status IS NOT NULL ORDER BY entry_status DESC");
 
         let totalRevenue = 0;
-        let inventoryHtml = '';
-
-        inventoryRows.forEach(row => {
-            const available = row.total_seats - row.booked_seats;
-            const percentage = row.total_seats > 0 ? (row.booked_seats / row.total_seats) * 100 : 0;
-            inventoryHtml += `
-                <div class="card">
-                    <h3>${row.category}</h3>
-                    <p>Available: <strong>${available}</strong> / ${row.total_seats}</p>
-                    <div class="progress-bar-container">
-                        <div class="progress-bar ${percentage > 90 ? 'danger' : ''}" style="width: ${percentage}%"></div>
-                    </div>
-                </div>
-            `;
-        });
-
-        let bookingsHtml = bookingRows.map(b => {
-            totalRevenue += parseFloat(b.amount);
-
-            let entryBadge = b.entry_status
-                ? `<span class="badge red">SCANNED</span>`
-                : `<span class="badge green">UNUSED</span>`;
-
-            let paymentBadge = '';
-            let actionBtn = '';
-
-            if (b.payment_status === 'approved') {
-                paymentBadge = `<span class="badge green">PAID</span>`;
-                actionBtn = `<span style="color:#27ae60; font-size:12px; font-weight:bold;">Verified ✓</span>`;
-            } else {
-                paymentBadge = `<span class="badge orange">PENDING</span>`;
-                actionBtn = `
-                    <div style="display:flex; gap:5px;">
-                        <a href="${b.payment_slip_url}" target="_blank" class="view-btn">View Slip</a>
-                        <button onclick="approveBooking('${b.booking_no}')" class="approve-btn" id="btn-${b.booking_no}">Approve</button>
-                    </div>
-                `;
-            }
-
-            return `
-                <tr id="row-${b.booking_no}">
-                    <td>${b.booking_no}</td>
-                    <td>${b.phone}</td>
-                    <td>${b.category}</td>
-                    <td>${b.quantity}</td>
-                    <td>OMR ${b.amount}</td>
-                    <td>${paymentBadge}</td>
-                    <td>${actionBtn}</td>
-                    <td>${entryBadge}</td>
-                </tr>
-            `;
-        }).join('');
+        bookingRows.forEach(b => totalRevenue += parseFloat(b.amount || 0));
 
         const html = `
-            <!DOCTYPE html>
-            <html>
-            <head>
-                <title>Eventz Cloud - Booking Management</title>
-                <meta name="viewport" content="width=device-width, initial-scale=1">
-                <style>
-                    body { font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; background-color: #f4f7f6; margin: 0; padding: 20px; color: #333; }
-                    h1, h2 { color: #2c3e50; }
-                    .header { display: flex; justify-content: space-between; align-items: center; border-bottom: 2px solid #ddd; padding-bottom: 10px; margin-bottom: 20px; flex-wrap: wrap; gap: 10px; }
-                    .revenue-badge { background-color: #27ae60; color: white; padding: 10px 20px; border-radius: 8px; font-size: 1.2em; font-weight: bold; }
-                    .logout-btn { background-color: #e74c3c; color: white; text-decoration: none; padding: 10px 15px; border-radius: 8px; font-weight: bold; font-size: 14px; }
-                    .grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 20px; margin-bottom: 30px; }
-                    .card { background: white; padding: 20px; border-radius: 8px; box-shadow: 0 4px 6px rgba(0,0,0,0.1); }
-                    .card h3 { margin-top: 0; color: #e74c3c; }
-                    .progress-bar-container { width: 100%; background-color: #ecf0f1; border-radius: 4px; overflow: hidden; margin-top: 10px; }
-                    .progress-bar { height: 10px; background-color: #3498db; }
-                    .progress-bar.danger { background-color: #e74c3c; }
-                    .table-container { width: 100%; overflow-x: auto; background: white; border-radius: 8px; box-shadow: 0 4px 6px rgba(0,0,0,0.1); }
-                    table { width: 100%; border-collapse: collapse; min-width: 800px; }
-                    th, td { padding: 12px 15px; text-align: left; border-bottom: 1px solid #ddd; }
-                    th { background-color: #2c3e50; color: white; white-space: nowrap; }
-                    tr:hover { background-color: #f1f1f1; }
-                    .badge { padding: 4px 8px; border-radius: 4px; font-size: 11px; font-weight: bold; text-transform: uppercase; }
-                    .badge.red { background: #e74c3c; color: white; }
-                    .badge.green { background: #2ecc71; color: white; }
-                    .badge.orange { background: #f39c12; color: white; }
-                    .approve-btn { background: #27ae60; color: white; border: none; padding: 6px 12px; border-radius: 4px; cursor: pointer; font-weight: bold; font-size: 12px; }
-                    .approve-btn:disabled { background: #bdc3c7; }
-                    .view-btn { background: #3498db; color: white; text-decoration: none; padding: 6px 12px; border-radius: 4px; font-size: 12px; font-weight: bold; }
-                </style>
-            </head>
-            <body>
-                <div class="header">
-                    <div style="display:flex; align-items:center; gap:15px;">
-                        <h1 style="margin:0;">🎫 Ticketing Management</h1>
-                        <a href="/logout" class="logout-btn">Logout</a>
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=0">
+    <title>Eventz Cloud - Admin Premium</title>
+    <link href="https://fonts.googleapis.com/css2?family=Outfit:wght@300;400;600;800&display=swap" rel="stylesheet">
+    <script src="https://unpkg.com/html5-qrcode" type="text/javascript"></script>
+    <style>
+        :root {
+            --primary: #1a237e;
+            --accent: #311b92;
+            --success: #00c853;
+            --warning: #ffab00;
+            --danger: #ff1744;
+            --bg: #f8faff;
+            --glass: rgba(255, 255, 255, 0.95);
+            --shadow: 0 10px 30px rgba(26, 35, 126, 0.08);
+        }
+
+        body {
+            font-family: 'Outfit', sans-serif;
+            background: var(--bg);
+            margin: 0;
+            padding: 0;
+            color: #1e293b;
+            min-height: 100vh;
+        }
+
+        /* Sidebar & Layout */
+        .layout { display: flex; min-height: 100vh; }
+        .sidebar { width: 260px; background: var(--primary); color: white; display: flex; flex-direction: column; position: fixed; height: 100vh; z-index: 100; transition: 0.3s; }
+        .main-content { flex: 1; margin-left: 260px; padding: 40px; transition: 0.3s; }
+
+        .logo-area { padding: 30px; text-align: center; border-bottom: 1px solid rgba(255,255,255,0.1); }
+        .logo-area h2 { margin: 0; font-size: 20px; font-weight: 800; letter-spacing: 1px; }
+
+        .nav { padding: 20px 0; flex: 1; }
+        .nav-item { 
+            padding: 15px 30px; 
+            display: flex; 
+            align-items: center; 
+            gap: 15px; 
+            color: rgba(255,255,255,0.7); 
+            text-decoration: none; 
+            cursor: pointer;
+            transition: 0.3s;
+            font-weight: 600;
+        }
+        .nav-item:hover, .nav-item.active { background: rgba(255,255,255,0.1); color: white; }
+        .nav-item.active { border-right: 4px solid var(--success); }
+
+        .logout-area { padding: 30px; border-top: 1px solid rgba(255,255,255,0.1); }
+        .btn-logout { width: 100%; padding: 12px; background: rgba(255,255,255,0.1); border: none; border-radius: 12px; color: white; cursor: pointer; font-weight: 700; transition: 0.3s; }
+        .btn-logout:hover { background: var(--danger); }
+
+        /* Mobile Nav */
+        .mobile-header { display: none; background: white; padding: 15px 20px; align-items: center; justify-content: space-between; box-shadow: var(--shadow); position: sticky; top: 0; z-index: 200; }
+        .mobile-menu-btn { font-size: 24px; background: none; border: none; cursor: pointer; color: var(--primary); }
+
+        /* Dashboard Cards */
+        .stats-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(240px, 1fr)); gap: 25px; margin-bottom: 40px; }
+        .stat-card { background: var(--glass); padding: 25px; border-radius: 24px; box-shadow: var(--shadow); border: 1px solid rgba(255,255,255,0.5); }
+        .stat-card h3 { margin: 0; color: #64748b; font-size: 14px; text-transform: uppercase; letter-spacing: 1px; }
+        .stat-card .val { display: block; font-size: 32px; font-weight: 800; color: var(--primary); margin: 10px 0; }
+        
+        .prog-container { height: 8px; background: #e2e8f0; border-radius: 10px; overflow: hidden; margin-top: 15px; }
+        .prog-bar { height: 100%; background: var(--primary); transition: 1s cubic-bezier(0.4, 0, 0.2, 1); }
+        .prog-bar.warn { background: var(--warning); }
+        .prog-bar.crit { background: var(--danger); }
+
+        /* Tables */
+        .card-table { background: white; border-radius: 24px; box-shadow: var(--shadow); overflow: hidden; margin-bottom: 40px; }
+        .table-header { padding: 25px 30px; background: #fbfcfe; border-bottom: 1px solid #f1f5f9; display: flex; justify-content: space-between; align-items: center; }
+        .table-header h2 { margin: 0; font-size: 20px; font-weight: 800; color: var(--primary); }
+        
+        .table-wrap { overflow-x: auto; }
+        table { width: 100%; border-collapse: collapse; min-width: 800px; }
+        th { padding: 18px 30px; text-align: left; font-size: 13px; color: #64748b; text-transform: uppercase; letter-spacing: 1px; background: #fbfcfe; border-bottom: 1px solid #f1f5f9; }
+        td { padding: 20px 30px; border-bottom: 1px solid #f8fafc; font-size: 15px; color: #334155; }
+        tr:last-child td { border-bottom: none; }
+        tr:hover { background: #fdfdff; }
+
+        .badge { padding: 6px 14px; border-radius: 50px; font-weight: 800; font-size: 11px; text-transform: uppercase; }
+        .badge.pending { background: #fff8e1; color: #ffab00; }
+        .badge.paid { background: #e8f5e9; color: #2e7d32; }
+        .badge.scanned { background: #fee2e2; color: #ef4444; }
+        .badge.unused { background: #f1f5f9; color: #64748b; }
+
+        /* Buttons */
+        .btn-action { padding: 8px 16px; border-radius: 10px; border: none; font-weight: 700; cursor: pointer; transition: 0.3s; font-size: 13px; }
+        .btn-approve { background: var(--success); color: white; }
+        .btn-view { background: #e0e7ff; color: var(--primary); text-decoration: none; padding: 8px 14px; display: inline-block; font-size: 13px; border-radius: 10px; font-weight: 700; }
+
+        /* Sections */
+        .section { display: none; animation: fadeIn 0.4s ease; }
+        .section.active { display: block; }
+        @keyframes fadeIn { from { opacity: 0; transform: translateY(10px); } to { opacity: 1; transform: translateY(0); } }
+
+        /* Scanner Specific */
+        #scanner-ui { max-width: 500px; margin: 0 auto; }
+        #reader { border-radius: 20px; overflow: hidden; margin-top: 20px; }
+        .scanner-card { background: #000; border-radius: 28px; padding: 20px; margin-top: 20px; }
+        .result-overlay { position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: rgba(0,0,0,0.8); z-index: 1000; display: none; align-items: center; justify-content: center; padding: 20px; }
+        .result-box { background: white; border-radius: 32px; width: 100%; max-width: 450px; overflow: hidden; }
+
+        @media (max-width: 900px) {
+            .sidebar { transform: translateX(-100%); width: 100%; }
+            .sidebar.open { transform: translateX(0); }
+            .main-content { margin-left: 0; padding: 20px; }
+            .mobile-header { display: flex; }
+            .stats-grid { gap: 15px; }
+        }
+    </style>
+</head>
+<body>
+
+    <div class="mobile-header">
+        <h2 style="margin:0; font-weight:800; color:var(--primary);">Eventz Portal</h2>
+        <button class="mobile-menu-btn" onclick="toggleMenu()">☰</button>
+    </div>
+
+    <div class="layout">
+        <!-- Sidebar -->
+        <div class="sidebar" id="sidebar">
+            <div class="logo-area">
+                <h2>EVENTZ CLOUD</h2>
+            </div>
+            <div class="nav">
+                <div class="nav-item active" onclick="showTab('overview', this)">📊 Overview</div>
+                <div class="nav-item" onclick="showTab('approvals', this)">🛒 Approvals</div>
+                <div class="nav-item" onclick="showTab('scanner', this)">📷 Scan Ticket</div>
+                <div class="nav-item" onclick="showTab('history', this)">🏁 Verified List</div>
+            </div>
+            <div class="logout-area">
+                <button class="btn-logout" onclick="location.href='/logout'">LOGOUT</button>
+            </div>
+        </div>
+
+        <!-- Main Content -->
+        <div class="main-content">
+            
+            <!-- OVERVIEW SECTION -->
+            <div id="overview" class="section active">
+                <div style="margin-bottom: 30px;">
+                    <h1 style="margin:0; font-size:28px; font-weight:800;">Command Center</h1>
+                    <p style="color:#64748b;">Live performance tracking for Music Night 2026</p>
+                </div>
+
+                <div class="stats-grid">
+                    <div class="stat-card">
+                        <h3>Total Gross Revenue</h3>
+                        <span class="val">OMR ${totalRevenue.toFixed(2)}</span>
+                        <p style="color:var(--success); font-size:12px; margin:0; font-weight:700;">↑ Live Sync</p>
                     </div>
-                    <div class="revenue-badge">Total Revenue: OMR ${totalRevenue.toFixed(2)}</div>
+                    ${inventoryRows.map(row => {
+            const booked = row.booked_seats;
+            const total = row.total_seats;
+            const perc = (booked / total) * 100;
+            let cls = ''; if (perc > 70) cls = 'warn'; if (perc > 90) cls = 'crit';
+            return `
+                        <div class="stat-card">
+                            <h3>${row.category} Inventory</h3>
+                            <span class="val">${booked} / ${total}</span>
+                            <div class="prog-container"><div class="prog-bar ${cls}" style="width: ${perc}%"></div></div>
+                        </div>
+                        `;
+        }).join('')}
                 </div>
+
+                <div class="card-table">
+                    <div class="table-header"><h2>Pending Approvals</h2></div>
+                    <div class="table-wrap">
+                        <table>
+                            <thead>
+                                <tr><th>Booking</th><th>Phone</th><th>Category</th><th>Qty</th><th>Verification</th><th>Action</th></tr>
+                            </thead>
+                            <tbody>
+                                ${bookingRows.filter(b => b.payment_status === 'pending').map(b => `
+                                <tr id="row-${b.booking_no}">
+                                    <td><strong>${b.booking_no}</strong></td>
+                                    <td>${b.phone}</td>
+                                    <td><span class="badge unused">${b.category}</span></td>
+                                    <td>${b.quantity}</td>
+                                    <td><span class="badge pending">AWAITING</span></td>
+                                    <td>
+                                        <div style="display:flex; gap:8px;">
+                                            <a href="${b.payment_slip_url}" target="_blank" class="btn-view">Slip</a>
+                                            <button onclick="approveBooking('${b.booking_no}')" class="btn-action btn-approve" id="btn-${b.booking_no}">Approve</button>
+                                        </div>
+                                    </td>
+                                </tr>`).join('')}
+                                ${bookingRows.filter(b => b.payment_status === 'pending').length === 0 ? '<tr><td colspan="6" style="text-align:center; padding:40px; color:#94a3b8;">No pending approvals at the moment. Good job!</td></tr>' : ''}
+                            </tbody>
+                        </table>
+                    </div>
+                </div>
+            </div>
+
+            <!-- APPROVALS SECTION -->
+            <div id="approvals" class="section">
+               <div class="card-table">
+                    <div class="table-header"><h2>Full Booking History</h2></div>
+                    <div class="table-wrap">
+                        <table>
+                            <thead>
+                                <tr><th>Booking</th><th>Phone</th><th>Cat</th><th>Qty</th><th>Status</th><th>Entry</th></tr>
+                            </thead>
+                            <tbody>
+                                ${bookingRows.map(b => `
+                                <tr>
+                                    <td><strong>${b.booking_no}</strong></td>
+                                    <td>${b.phone}</td>
+                                    <td>${b.category}</td>
+                                    <td>${b.quantity}</td>
+                                    <td><span class="badge ${b.payment_status === 'approved' ? 'paid' : 'pending'}">${b.payment_status}</span></td>
+                                    <td><span class="badge ${b.entry_status ? 'scanned' : 'unused'}">${b.entry_status ? 'IN' : 'OUT'}</span></td>
+                                </tr>`).join('')}
+                            </tbody>
+                        </table>
+                    </div>
+                </div>
+            </div>
+
+            <!-- SCANNER SECTION -->
+            <div id="scanner" class="section">
+                <div id="scanner-ui">
+                    <div style="text-align:center; margin-bottom:30px;">
+                        <h2 style="font-weight:800; font-size:24px;">Ticket Verification</h2>
+                        <p style="color:#64748b;">Open camera to scan QR codes for gate entry</p>
+                        <button class="btn-action btn-approve" style="padding:15px 40px; font-size:16px; margin-top:20px;" onclick="startScanner()">OPEN CAMERA</button>
+                    </div>
+                    
+                    <div id="scanner-container" style="display:none;">
+                        <div id="reader"></div>
+                        <div id="scanner-error" style="background:var(--danger); color:white; padding:10px; font-size:12px; display:none; text-align:center; border-radius:0 0 20px 20px;"></div>
+                        <button class="btn-logout" style="margin-top:20px;" onclick="stopScanner()">CANCEL SCAN</button>
+                    </div>
+                </div>
+            </div>
+
+            <!-- HISTORY SECTION -->
+            <div id="history" class="section">
+                <div class="card-table">
+                    <div class="table-header"><h2>Verified Attendee Registry</h2></div>
+                    <div class="table-wrap">
+                        <table>
+                            <thead>
+                                <tr><th>Booking</th><th>Category</th><th>Qty</th><th>Phone</th><th>Entry Time</th></tr>
+                            </thead>
+                            <tbody>
+                                ${verifiedRows.map(v => `
+                                <tr>
+                                    <td><strong>${v.booking_no}</strong></td>
+                                    <td>${v.category}</td>
+                                    <td>${v.quantity}</td>
+                                    <td>${v.phone}</td>
+                                    <td><span style="font-weight:700; color:var(--success);">${v.entry_status}</span></td>
+                                </tr>`).join('')}
+                                ${verifiedRows.length === 0 ? '<tr><td colspan="5" style="text-align:center; padding:40px;">Gate entry has not started yet.</td></tr>' : ''}
+                            </tbody>
+                        </table>
+                    </div>
+                </div>
+            </div>
+
+        </div>
+    </div>
+
+    <!-- Scanner Result Overlay -->
+    <div class="result-overlay" id="res-overlay">
+        <div class="result-box">
+             <div id="res-header" style="padding:30px; text-align:center; color:white;">
+                <h2 style="margin:0;">Checking...</h2>
+             </div>
+             <div style="padding:30px;" id="res-content">
+                <div id="res-details" style="display:none;">
+                    <div style="display:flex; justify-content:space-between; margin-bottom:15px;"><span>Booking No</span><strong id="res-bno">-</strong></div>
+                    <div style="display:flex; justify-content:space-between; margin-bottom:15px;"><span>Category</span><strong id="res-cat">-</strong></div>
+                    <div style="display:flex; justify-content:space-between; margin-bottom:15px;"><span>Quantity</span><strong id="res-qty">-</strong></div>
+                    <div id="res-members" style="margin-top:20px; padding:15px; background:#f8fafc; border-radius:15px;"></div>
+                </div>
+                <div id="res-error" style="display:none; text-align:center; padding:20px 0;">
+                    <p id="res-err-txt"></p>
+                </div>
+                <div id="res-actions" style="margin-top:30px; text-align:center; display:none;">
+                    <button class="btn-action btn-approve" style="width:100%; padding:18px;" id="btn-grant" onclick="confirmEntrance()">GRANT ENTRY</button>
+                    <button class="btn-logout" style="margin-top:15px; width:100%;" onclick="closeOverlay()">CLOSE</button>
+                </div>
+                <button class="btn-logout" id="btn-err-close" style="margin-top:15px; width:100%; display:none;" onclick="closeOverlay()">CLOSE</button>
+             </div>
+        </div>
+    </div>
+
+    <script>
+        function showTab(id, el) {
+            document.querySelectorAll('.section').forEach(s => s.classList.remove('active'));
+            document.querySelectorAll('.nav-item').forEach(n => n.classList.remove('active'));
+            document.getElementById(id).classList.add('active');
+            if(el) el.classList.add('active');
+            if(id !== 'scanner') stopScanner();
+            if(window.innerWidth < 900) toggleMenu();
+        }
+
+        function toggleMenu() {
+            document.getElementById('sidebar').classList.toggle('open');
+        }
+
+        async function approveBooking(bookingNo) {
+            if(!confirm('Authorize payment for ' + bookingNo + '?')) return;
+            const btn = document.getElementById('btn-' + bookingNo);
+            btn.disabled = true; btn.innerText = 'Syncing...';
+            try {
+                const response = await fetch('/admin/approve', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ bookingNo })
+                });
+                const data = await response.json();
+                if (data.success) { location.reload(); } else { alert('Error: ' + data.error); btn.disabled = false; btn.innerText = 'Approve'; }
+            } catch (e) { alert('Network Error'); btn.disabled = false; }
+        }
+
+        // --- Scanner Logic ---
+        let html5QrCode = null;
+        let activeTicketId = null;
+
+        function startScanner() {
+            document.getElementById('scanner-container').style.display = 'block';
+            document.getElementById('scanner-error').style.display = 'none';
+            if (!html5QrCode) html5QrCode = new Html5Qrcode("reader");
+            
+            const config = { fps: 10, qrbox: { width: 250, height: 250 } };
+            html5QrCode.start({ facingMode: "environment" }, config, async (text) => {
+                let tId = text;
+                try { const url = new URL(text); tId = url.searchParams.get("id") || text; } catch(e){}
+                stopScanner();
+                processTicket(tId);
+            }).catch(err => {
+                document.getElementById('scanner-error').style.display = 'block';
+                document.getElementById('scanner-error').innerText = err;
+            });
+        }
+
+        function stopScanner() {
+            if (html5QrCode) html5QrCode.stop().catch(() => {});
+            document.getElementById('scanner-container').style.display = 'none';
+        }
+
+        async function processTicket(tId) {
+            activeTicketId = tId;
+            const overlay = document.getElementById('res-overlay');
+            const h = document.getElementById('res-header');
+            overlay.style.display = 'flex';
+            h.innerHTML = '<h2>Checking Database...</h2>';
+            h.style.background = '#64748b';
+
+            try {
+                const res = await fetch('/verify/scan', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ ticketId: tId })
+                });
+                const data = await res.json();
                 
-                <h2>Live Seat Availability</h2>
-                <div class="grid">
-                    ${inventoryHtml}
-                </div>
+                if (!res.ok) {
+                    h.innerHTML = '<h2>INVALID TICKET</h2>'; h.style.background = 'var(--danger)';
+                    document.getElementById('res-details').style.display = 'none';
+                    document.getElementById('res-error').style.display = 'block';
+                    document.getElementById('res-err-txt').innerText = data.error || 'Ticket not found';
+                    document.getElementById('btn-err-close').style.display = 'block';
+                    document.getElementById('res-actions').style.display = 'none';
+                    return;
+                }
 
-                <div style="display:flex; justify-content:space-between; align-items:center;">
-                    <h2>All Bookings</h2>
-                    <span style="color:#7f8c8d; font-weight:bold;">Total Records: ${bookingRows.length}</span>
-                </div>
-                <div class="table-container">
-                    <table>
-                        <thead>
-                            <tr><th>Booking No</th><th>Phone</th><th>Category</th><th>Qty</th><th>Amount</th><th>Verification</th><th>Actions</th><th>Entry</th></tr>
-                        </thead>
-                        <tbody>
-                            ${bookingsHtml}
-                        </tbody>
-                    </table>
-                </div>
+                document.getElementById('res-details').style.display = 'block';
+                document.getElementById('res-error').style.display = 'none';
+                document.getElementById('btn-err-close').style.display = 'none';
+                document.getElementById('res-bno').innerText = data.ticket.booking_no;
+                document.getElementById('res-cat').innerText = data.ticket.category;
+                document.getElementById('res-qty').innerText = data.ticket.quantity;
 
-                <script>
-                    async function approveBooking(bookingNo) {
-                        if(!confirm('Authorize payment for ' + bookingNo + '? This will send the PDF ticket to the customer.')) return;
-                        
-                        const btn = document.getElementById('btn-' + bookingNo);
-                        btn.disabled = true;
-                        btn.innerText = 'Sending...';
+                if (data.status === 'already_scanned') {
+                    h.innerHTML = '<h2>ALREADY USED</h2>'; h.style.background = 'var(--warning)';
+                    document.getElementById('res-actions').style.display = 'none';
+                    document.getElementById('btn-err-close').style.display = 'block';
+                    document.getElementById('res-error').style.display = 'block';
+                    document.getElementById('res-err-txt').innerHTML = 'Already Checked In at:<br><strong>' + data.ticket.entry_status + '</strong>';
+                } else {
+                    h.innerHTML = '<h2>VALID TICKET</h2>'; h.style.background = 'var(--success)';
+                    document.getElementById('res-actions').style.display = 'block';
+                }
+            } catch(e) { alert('Verif Error'); closeOverlay(); }
+        }
 
-                        try {
-                            const response = await fetch('/admin/approve', {
-                                method: 'POST',
-                                headers: { 'Content-Type': 'application/json' },
-                                body: JSON.stringify({ bookingNo })
-                            });
-                            const data = await response.json();
-                            if (data.success) {
-                                alert('Success! Ticket sent to customer WhatsApp.');
-                                location.reload();
-                            } else {
-                                alert('Error: ' + data.error);
-                                btn.disabled = false;
-                                btn.innerText = 'Approve';
-                            }
-                        } catch (e) {
-                            alert('Network Error');
-                            btn.disabled = false;
-                            btn.innerText = 'Approve';
-                        }
-                    }
-                </script>
-            </body>
-            </html>
+        async function confirmEntrance() {
+            const btn = document.getElementById('btn-grant');
+            btn.disabled = true; btn.innerText = 'Granting...';
+            try {
+                const res = await fetch('/verify/confirm', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ ticketId: activeTicketId })
+                });
+                if (res.ok) {
+                    document.getElementById('res-header').innerHTML = '<h2>ENTRY GRANTED</h2>';
+                    document.getElementById('res-actions').innerHTML = '<button class="btn-action btn-approve" style="width:100%; background:#222;" onclick="location.reload()">NEXT CUSTOMER</button>';
+                } else { alert('Confirmation Failed'); btn.disabled = false; }
+            } catch(e) { alert('Network Error'); btn.disabled = false; }
+        }
+
+        function closeOverlay() {
+            document.getElementById('res-overlay').style.display = 'none';
+            document.getElementById('res-details').style.display = 'none';
+            document.getElementById('res-actions').style.display = 'none';
+            document.getElementById('btn-err-close').style.display = 'none';
+            startScanner();
+        }
+
+        // Auto-tab if coming from QR link
+        window.addEventListener('load', () => {
+            const params = new URLSearchParams(window.location.search);
+            if(params.has('id')) {
+                showTab('scanner');
+                processTicket(params.get('id'));
+            }
+        });
+    </script>
+</body>
+</html>
         `;
         res.send(html);
     } catch (err) {
@@ -307,265 +595,12 @@ app.get('/dashboard', requireAuth, async (req, res) => {
     }
 });
 
-// ======================================
-// Ticket Scanner System (HTML5-QRCode)
-// ======================================
-
-// The frontend HTML UI
+// Redirect old /verify to the new unified dashboard scanner tab
 app.get('/verify', requireAuth, (req, res) => {
-    // Main Scanner UI
-    res.send(`
-            <!DOCTYPE html>
-                <html lang="en">
-                    <head>
-                        <meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1">
-                            <title>QR Scanner</title>
-                            <link href="https://fonts.googleapis.com/css2?family=Outfit:wght@300;400;600;800&display=swap" rel="stylesheet">
-                                <script src="https://unpkg.com/html5-qrcode" type="text/javascript"></script>
-                                <style>
-                                    :root {--primary: #1a237e; --success: #2e7d32; --warning: #ff6d00; --bg: #f4f7fa; }
-                                    body {font-family: 'Outfit', sans-serif; background: var(--bg); margin: 0; padding: 10px; display: flex; flex-direction: column; align-items: center; min-height: 100vh; }
-                                    .nav-bar {width: 100%; max-width: 450px; display: flex; justify-content: space-between; align-items: center; margin-bottom: 10px; }
-                                    .nav-bar a {color: #e74c3c; font-weight: bold; text-decoration: none; font-size: 14px; }
-                                    .card {background: white; border-radius: 28px; box-shadow: 0 15px 50px rgba(0,0,0,0.1); width: 100%; max-width: 450px; overflow: hidden; position:relative; display: none; }
-                                    .header {background: linear-gradient(135deg, #1a237e 0%, #311b92 100%); color: white; padding: 30px 20px; text-align: center; }
-                                    .status-badge {padding: 12px 25px; border-radius: 50px; font-weight: 800; font-size: 14px; text-transform: uppercase; margin-top: 15px; display: inline-flex; align-items: center; box-shadow: 0 4px 15px rgba(0,0,0,0.1); }
-                                    .valid {background: #4caf50; color: white; }
-                                    .already-used {background: var(--warning); color: white; }
-                                    .content {padding: 25px; }
-                                    .action-btn {width: 100%; padding: 20px; background: var(--primary); color: white; border: none; border-radius: 20px; font-size: 18px; font-weight: 800; margin-top: 25px; cursor: pointer; display: block; text-align: center; }
-                                    #scanner-overlay {position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: #000; z-index: 10000; display: flex; flex-direction: column; }
-                                    #reader {width: 100%; flex: 1; }
-                                    .q-grid {display: grid; grid-template-columns: 1fr 1fr; gap: 15px; margin-bottom: 25px; }
-                                    .q-box {background: #f8faff; padding: 18px; border-radius: 20px; text-align: center; border: 1px solid #e3e9ff; }
-                                    .q-val {font-size: 32px; font-weight: 800; color: var(--primary); display: block; }
-                                    .q-label {font-size: 11px; color: #78909c; text-transform: uppercase; }
-                                    .item {display: flex; justify-content: space-between; padding: 15px 5px; border-bottom: 1px solid #eee; }
-                                    .item span:first-child {color: #90a4ae; font-size: 14px; }
-                                    .item span:last-child {font-weight: 700; color: #333; }
-                                    .members {background: #f0f4ff; padding: 15px; border-radius: 18px; margin-top: 15px; }
-                                    .chip {display: inline-block; background: white; color: var(--primary); padding: 6px 14px; border-radius: 12px; font-size: 13px; margin: 4px; font-weight: 600; box-shadow: 0 2px 5px rgba(0,0,0,0.05); }
-                                    .already-scanned-box {background: #fff3e0; border: 2px solid var(--warning); padding: 20px; border-radius: 20px; color: #e65100; margin-top: 15px; text-align: center; }
-                                    #confetti-overlay {position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: rgba(46, 125, 50, 0.95); z-index: 9999; display: none; flex-direction: column; justify-content: center; align-items: center; color: white; text-align: center; }
-                                    .success-circle {width: 100px; height: 100px; border-radius: 50%; background: white; color: #2e7d32; display: flex; justify-content: center; align-items: center; font-size: 50px; margin-bottom: 20px; animation: pop 0.5s cubic-bezier(0.175, 0.885, 0.32, 1.275); }
-                                    @keyframes pop {0% { transform: scale(0); } 100% {transform: scale(1); } }
-                                </style>
-                            </head>
-                            <body>
-                                <div class="nav-bar">
-                                    <span style="font-weight:800; color:var(--primary);">Eventz Web Scanner</span>
-                                    <a href="/logout">Logout</a>
-                                </div>
-
-                                <div id="confetti-overlay">
-                                    <div class="success-circle">✓</div>
-                                    <h1 style="margin:0">TICKET CONFIRMED</h1>
-                                    <p>Entry Granted Successfully</p>
-                                    <button class="action-btn" style="width:200px; background:#607d8b; margin-top:30px;" onclick="startScanner()">SCAN NEXT</button>
-                                </div>
-
-                                <!-- Scanner Camera -->
-                                <div id="scanner-overlay">
-                                    <div id="reader"></div>
-                                    <div id="scanner-error" style="background:#ff5252; color:white; padding:10px; font-size:12px; display:none; text-align:center;"></div>
-                                    <div style="padding: 20px; background: #000; text-align: center; display:flex; justify-content:space-between; align-items:center;">
-                                        <button onclick="stopScanner();" style="background:#444; color:white; border:none; padding:10px 15px; border-radius:8px;">Cancel</button>
-                                        <p style="color:#aaa; font-size:12px; margin:0;">Target QR within frame</p>
-                                        <div style="width:60px;"></div>
-                                    </div>
-                                </div>
-
-                                <!-- Result Card -->
-                                <div class="card" id="result-card" style="display:block;">
-                                    <div class="header" id="card-header" style="background:var(--primary);">
-                                        <h2 style="margin:0; font-size:24px;">Ready to Scan</h2>
-                                        <p style="margin:5px 0 0 0; font-size:14px; opacity:0.8;">Awaiting ticket input...</p>
-                                    </div>
-                                    <div class="content" style="text-align:center;">
-                                        <p style="color:#666; margin-bottom:30px;">Tap the button below to open the camera and scan a ticket.</p>
-                                        <button class="action-btn" style="background:#2ecc71; margin-top:0;" onclick="startScanner()">OPEN CAMERA</button>
-
-                                        <hr style="border:0; border-top:1px solid #eee; margin:30px 0;">
-
-                                            <div id="dynamic-content" style="text-align:left; display:none;">
-                                                <div class="q-grid">
-                                                    <div class="q-box"><span class="q-val" id="res-qty">-</span><span class="q-label">Total Seats</span></div>
-                                                    <div class="q-box"><span class="q-val" id="res-cat" style="font-size:20px;">-</span><span class="q-label">Category</span></div>
-                                                </div>
-                                                <div class="item"><span>Booking ID</span><span id="res-booking">-</span></div>
-                                                <div class="item"><span>Phone</span><span id="res-phone">-</span></div>
-
-                                                <div class="members">
-                                                    <p style="margin:0 0 10px; font-size:12px; font-weight:800; color:var(--primary); text-transform:uppercase;">Registered Patrons</p>
-                                                    <div id="res-members"></div>
-                                                </div>
-
-                                                <div id="already-box" class="already-scanned-box" style="display:none;">
-                                                    <p style="margin:0; font-weight:800; font-size:18px;">ACCESS DENIED</p>
-                                                    <p style="margin:5px 0; font-size:14px;">This ticket was verified at:<br><strong id="res-time"></strong></p>
-                                                </div>
-
-                                                <div id="confirm-box" style="margin-top:20px; text-align:center;">
-                                                    <!-- Only show if ticket is valid -->
-                                                </div>
-                                            </div>
-                                    </div>
-                                </div>
-
-                                <script>
-                                    let html5QrCode = null;
-
-                                    function getUrlParam(param) {
-                    const urlParams = new URLSearchParams(window.location.search);
-                                    return urlParams.get(param);
-                }
-
-                                    function stopScanner() {
-                                        if (html5QrCode) {
-                                            html5QrCode.stop().catch(err => console.error("Error stopping scanner", err));
-                                        }
-                                        document.getElementById('scanner-overlay').style.display = 'none';
-                                        document.getElementById('result-card').style.display = 'block';
-                                    }
-
-                                    function startScanner() {
-                                        const errDiv = document.getElementById('scanner-error');
-                                        errDiv.style.display = 'none';
-                                        document.getElementById('confetti-overlay').style.display = 'none';
-                                        document.getElementById('result-card').style.display = 'none';
-                                        document.getElementById('scanner-overlay').style.display = 'flex';
-
-                                        if (!html5QrCode) {
-                                            html5QrCode = new Html5Qrcode("reader");
-                                        }
-
-                                        const config = {fps: 10, qrbox: {width: 250, height: 250 } };
-                                        html5QrCode.start(
-                                            {facingMode: "environment" }, 
-                                            config, 
-                                            async (decodedText) => {
-                                                try {
-                                                    const url = new URL(decodedText);
-                                                    const tId = url.searchParams.get("id");
-                                                    if (tId) {
-                                                        html5QrCode.stop().then(() => {
-                                                            document.getElementById('scanner-overlay').style.display = 'none';
-                                                            processTicket(tId);
-                                                        });
-                                                    } else {
-                                                        alert("Invalid Ticket Format");
-                                                    }
-                                                } catch(e) {
-                                                    html5QrCode.stop().then(() => {
-                                                        document.getElementById('scanner-overlay').style.display = 'none';
-                                                        processTicket(decodedText);
-                                                    });
-                                                }
-                                            },
-                                            (error) => {
-                                                // Only log critical/new errors to the screen
-                                                if(error.includes('Permission')) {
-                                                    errDiv.style.display = 'block';
-                                                    errDiv.innerText = "Error: Camera Permission Denied";
-                                                } else if (error.includes('NotFound')) {
-                                                    errDiv.style.display = 'block';
-                                                    errDiv.innerText = "Error: No rear camera found";
-                                                }
-                                            }
-                                        ).catch(err => {
-                                            errDiv.style.display = 'block';
-                                            errDiv.innerText = "Scanner Error: " + err;
-                                            console.error(err);
-                                        });
-                                    }
-                                    async function processTicket(tId) {
-                    try {
-                        const response = await fetch('/verify/scan', {
-                                        method: 'POST',
-                                    headers: {'Content-Type': 'application/json' },
-                                    body: JSON.stringify({ticketId: tId })
-                        });
-                                    const data = await response.json();
-
-                                    document.getElementById('result-card').style.display = 'block';
-                                    document.getElementById('dynamic-content').style.display = 'block';
-
-                                    if (!response.ok) {
-                                        document.getElementById('card-header').innerHTML = \`
-                                    <h2 style="margin:0; font-size:24px;">Invalid Ticket</h2>
-                                    <div class="status-badge already-used" style="background:#d32f2f;">❌ NOT FOUND</div>
-                                    \`;
-                                    document.getElementById('dynamic-content').style.display = 'none';
-                                    return;
-                        }
-
-                                    // Populate Data
-                                    document.getElementById('res-qty').innerText = data.ticket.quantity;
-                                    document.getElementById('res-cat').innerText = data.ticket.category;
-                                    document.getElementById('res-booking').innerText = data.ticket.booking_no;
-                                    document.getElementById('res-phone').innerText = data.ticket.phone;
-
-                                    // Render Members
-                                    let membersHtml = '';
-                                    let membersArr = [];
-                                    try {membersArr = JSON.parse(data.ticket.members); } catch(e){ }
-                        membersArr.forEach(m => {
-                                        membersHtml += \`<span class="chip">\${m}</span>\`;
-                        });
-                                    document.getElementById('res-members').innerHTML = membersHtml;
-
-                                    if (data.status === 'already_scanned') {
-                                        document.getElementById('card-header').innerHTML = \`
-                                    <h2 style="margin:0; font-size:24px;">Music Night 2026</h2>
-                                    <div class="status-badge already-used">🛑 ALREADY SCANNED</div>
-                                    \`;
-                                    document.getElementById('already-box').style.display = 'block';
-                                    document.getElementById('confirm-box').style.display = 'none';
-                                    document.getElementById('res-time').innerText = data.ticket.entry_status;
-                        } else {
-                                        document.getElementById('card-header').innerHTML = \`
-                                    <h2 style="margin:0; font-size:24px;">Music Night 2026</h2>
-                                    <div class="status-badge valid">🛡️ VALID TICKET</div>
-                                    \`;
-                                    document.getElementById('already-box').style.display = 'none';
-                                    document.getElementById('confirm-box').style.display = 'block';
-                                    document.getElementById('confirm-box').innerHTML = \`
-                                    <button class="action-btn" onclick="confirmEntrance('\${tId}')">CONFIRM ENTRANCE</button>
-                                    \`;
-                        }
-                    } catch(err) {
-                                        alert("Network Error");
-                    }
-                }
-
-                                    async function confirmEntrance(tId) {
-                    try {
-                        const response = await fetch('/verify/confirm', {
-                                        method: 'POST',
-                                    headers: {'Content-Type': 'application/json' },
-                                    body: JSON.stringify({ticketId: tId })
-                        });
-                                    if (response.ok) {
-                                        document.getElementById('confetti-overlay').style.display = 'flex';
-                        } else {
-                                        alert("Failed to confirm entrance");
-                        }
-                    } catch(e) {
-                                        alert("Network Error");
-                    }
-                }
-
-                                    // If loaded via ?id= link
-                                    const initialId = getUrlParam('id');
-                                    if (initialId) {
-                                        processTicket(initialId);
-                }
-                                </script>
-                            </body>
-                        </html>
-                            `);
+    const id = req.query.id;
+    if (id) return res.redirect(`/dashboard?tab=scanner&id=${id}`);
+    res.redirect('/dashboard?tab=scanner');
 });
-
 // The backend API that checks the DB
 app.post('/verify/scan', async (req, res) => {
     const { ticketId } = req.body;
