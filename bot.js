@@ -375,7 +375,9 @@ async function processPendingBooking(phone, user, slipUrl) {
         const timestamp = new Date().getTime();
         const randStr = Math.random().toString(36).substring(2, 6).toUpperCase();
         const ticketId = 'MN26-' + timestamp + '-' + randStr;
-        const bookingNo = 'B-' + timestamp.toString().slice(-6);
+
+        // Use a more unique Booking No (B + Random 8 chars)
+        const bookingNo = 'B-' + Math.random().toString(36).substring(2, 10).toUpperCase();
 
         const price = getCategoryPrice(user.category);
         const totalAmount = price * user.quantity;
@@ -395,13 +397,16 @@ async function processPendingBooking(phone, user, slipUrl) {
 
         await sendText(phone, "📥 *Payment Received!*\n\nOur staff will verify your payment slip shortly. Once authorized, your official PDF ticket will be sent to you automatically. Thank you!");
 
-        // Reset State
-        await saveUserState(phone, "MN_MAIN");
+        // Reset State AND Clear Temp Data
+        await db.query(
+            "UPDATE mn_users SET state = 'MN_MAIN', temp_category = NULL, temp_quantity = NULL, temp_members = NULL, temp_slip_url = NULL WHERE phone_number = ?",
+            [phone]
+        );
 
     } catch (err) {
-        console.error("Pending booking failed:", err);
-        await sendText(phone, "❌ Sorry, an error occurred while saving your booking. Please contact support.");
-        await saveUserState(phone, "MN_MAIN");
+        console.error("❌ [MN] Pending booking failed:", err);
+        await sendText(phone, "❌ Sorry, an error occurred while saving your booking. Our team has been notified.");
+        await db.query("UPDATE mn_users SET state = 'MN_MAIN' WHERE phone_number = ?", [phone]);
     }
 }
 
