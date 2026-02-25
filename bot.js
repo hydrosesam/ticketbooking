@@ -51,7 +51,7 @@ async function sendMNWelcome(phone) {
         "At Muscat Club, Al Wadi Kabir…\n\n" +
         "We are bringing you non-stop music, live performances, and a massive food festival under one roof! 🎶✨";
 
-    const imageUrl = "https://lh3.googleusercontent.com/d/12Ajc6kYTPKreLhRBs2ZtfRfNCHiK2oNR";
+    const imageUrl = "https://lh3.googleusercontent.com/d/1Aosg-daRT0Dp8_lhxy7mNNS_WnlWoBL9";
 
     // 1. Try sending the promotional image first
     try {
