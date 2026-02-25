@@ -175,21 +175,15 @@ async function showMNBookingSummary(phone, bookingData) {
 async function sendMNPaymentRequest(phone) {
     const paymentQrUrl = "https://lh3.googleusercontent.com/d/1PgQY8UgeUxsbv7KKs0J-G5bMQhMx5n9U";
 
-    // 1. Send the payment QR Code
-    try {
-        await sendWhatsAppMessage(phone, {
-            type: "image",
-            image: {
-                link: paymentQrUrl,
-                caption: "💳 *Scan to Pay*\n\nPlease scan the QR code above to complete your payment."
-            }
-        });
-    } catch (e) {
-        console.error("Payment QR failed to send:", e.message);
-    }
-
-    // 2. Request the slip
-    return sendText(phone, "📸 After payment, *please send a photo or PDF of your payment slip here* so we can issue your ticket.");
+    // Consolidate into one message to ensure correct order and grouping
+    return sendWhatsAppMessage(phone, {
+        type: "image",
+        image: {
+            link: paymentQrUrl,
+            caption: "💳 *Step 1: Scan to Pay*\n\nPlease scan the QR code above to complete your payment.\n\n" +
+                "📸 *Step 2: Upload Receipt*\n\nAfter payment, *please send a photo or PDF of your payment slip here* so we can issue your ticket."
+        }
+    });
 }
 
 function getCategoryPrice(category) {
