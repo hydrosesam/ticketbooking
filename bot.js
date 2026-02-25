@@ -212,21 +212,29 @@ async function saveTempData(phone, field, value) {
     await db.query(`UPDATE mn_users SET temp_${field} = ? WHERE phone_number = ?`, [value, phone]);
 }
 
-async function handleMusicNightFlow(phone, message) {
+async function handleMusicNightFlow(phone, event) {
     const user = await getUserState(phone);
     const currentState = user.state;
 
+    // Extract text/payload from the webhook event
+    let message = "";
+    if (typeof event === 'string') {
+        message = event; // Fallback for any direct calls
+    } else if (event.type === 'text') {
+        message = event.text.body;
+    } else if (event.type === 'interactive') {
+        const interactive = event.interactive;
+        if (interactive.type === 'button_reply') message = interactive.button_reply.id;
+        else if (interactive.type === 'list_reply') message = interactive.list_reply.id;
+    }
+
+    const cleanMsg = message.toLowerCase().trim();
+
     // Trigger word handling
-    if (message.toLowerCase() === 'menu' || message.toLowerCase() === 'hi') {
-        await sendText(phone, "Welcome! Type 'Music Night' or tap the button below to start booking.");
-        return sendWhatsAppMessage(phone, {
-            type: "interactive",
-            interactive: {
-                type: "button",
-                body: { text: "Main Menu" },
-                action: { buttons: [{ type: "reply", reply: { id: "BTN_MUSIC_NIGHT", title: "Music Night 2026" } }] }
-            }
-        });
+    if (cleanMsg === 'menu' || cleanMsg === 'hi' || cleanMsg === 'music night') {
+        await sendMNWelcome(phone);
+        await saveUserState(phone, "MN_WELCOME_WAIT");
+        return;
     }
 
     if (message === "BTN_MUSIC_NIGHT") {
@@ -244,8 +252,8 @@ async function handleMusicNightFlow(phone, message) {
     // --- Media Handling (Images/Documents for Payment Slips) ---
     if (currentState === "MN_PAYMENT_UPLOAD") {
         let localPath = null;
-        if (typeof message === 'object' && (message.image || message.document)) {
-            const mediaObj = message.image || message.document;
+        if (typeof event === 'object' && (event.image || event.document)) {
+            const mediaObj = event.image || event.document;
             try {
                 // 1. Get Media URL from Meta API
                 const mediaRes = await axios.get(`https://graph.facebook.com/v17.0/${mediaObj.id}`, {

@@ -133,23 +133,10 @@ app.post('/webhook', async (req, res) => {
             const senderPhone = webhookEvent.from;
 
             try {
-                let incomingText = "";
-
-                if (webhookEvent.type === "text") {
-                    incomingText = webhookEvent.text.body;
-                } else if (webhookEvent.type === "interactive") {
-                    const interactiveObj = webhookEvent.interactive;
-                    if (interactiveObj.type === "button_reply") {
-                        incomingText = interactiveObj.button_reply.id;
-                    } else if (interactiveObj.type === "list_reply") {
-                        incomingText = interactiveObj.list_reply.id;
-                    }
-                }
-
-                if (incomingText) {
-                    console.log(`📩 Received message from ${senderPhone}: ${incomingText}`);
-                    await handleMusicNightFlow(senderPhone, incomingText);
-                }
+                // Pass the full webhook event object to the bot flow
+                //bot.js will determine how to handle text vs media
+                console.log(`📩 Webhook Event from ${senderPhone}: ${webhookEvent.type}`);
+                await handleMusicNightFlow(senderPhone, webhookEvent);
             } catch (err) {
                 console.error('❌ Error handling webhook event:', err);
             }
