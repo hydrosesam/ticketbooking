@@ -16,7 +16,7 @@ async function getBase64ImageFromUrl(imageUrl) {
 
 async function generateTicketPDF(bookingData) {
     // Generate QR Code containing the verification URL
-    const verifyUrl = `https://arvindmanpower.com/fest/verify.php?id=${bookingData.ticketId}`;
+    const verifyUrl = `https://eventz.cloud/verify?id=${bookingData.ticketId}`;
     let qrBase64 = '';
     try {
         qrBase64 = await QRCode.toDataURL(verifyUrl, { width: 150, margin: 1, color: { dark: '#000000', light: '#ffffff' } });
