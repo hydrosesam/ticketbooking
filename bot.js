@@ -74,8 +74,14 @@ async function sendMNWelcome(phone) {
 async function sendMNCategorySelect(phone) {
     const imageUrl = "https://lh3.googleusercontent.com/d/1VyFxQIWWQNB2pFHnm_iwAbjBQlY_38q2";
 
-    // Send List first
+    // Send Image first
     await sendWhatsAppMessage(phone, {
+        type: "image",
+        image: { link: imageUrl, caption: "🎫 View the seating layout above to choose your category." }
+    });
+
+    // Send List second
+    return sendWhatsAppMessage(phone, {
         type: "interactive",
         interactive: {
             type: "list",
@@ -97,12 +103,6 @@ async function sendMNCategorySelect(phone) {
                 ]
             }
         }
-    });
-
-    // Send Image second
-    return sendWhatsAppMessage(phone, {
-        type: "image",
-        image: { link: imageUrl, caption: "🎫 View the seating layout above to choose your category." }
     });
 }
 
