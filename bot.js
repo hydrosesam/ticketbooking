@@ -53,14 +53,21 @@ async function sendMNWelcome(phone) {
 
     const imageUrl = "https://lh3.googleusercontent.com/d/12Ajc6kYTPKreLhRBs2ZtfRfNCHiK2oNR";
 
+    // 1. Try sending the promotional image first
+    try {
+        await sendWhatsAppMessage(phone, {
+            type: "image",
+            image: { link: imageUrl }
+        });
+    } catch (e) {
+        console.error("Welcome image fail:", e.message);
+    }
+
+    // 2. Send interactive message (Always sent)
     return sendWhatsAppMessage(phone, {
         type: "interactive",
         interactive: {
             type: "button",
-            header: {
-                type: "image",
-                image: { link: imageUrl }
-            },
             body: { text: msg },
             action: {
                 buttons: [
@@ -74,19 +81,23 @@ async function sendMNWelcome(phone) {
 async function sendMNCategorySelect(phone) {
     const imageUrl = "https://lh3.googleusercontent.com/d/1VyFxQIWWQNB2pFHnm_iwAbjBQlY_38q2";
 
-    // Send Image first
-    await sendWhatsAppMessage(phone, {
-        type: "image",
-        image: { link: imageUrl, caption: "🎫 View the seating layout above to choose your category." }
-    });
+    // 1. Try sending seating layout image (with failover)
+    try {
+        await sendWhatsAppMessage(phone, {
+            type: "image",
+            image: { link: imageUrl, caption: "🎫 View the seating layout above to choose your category." }
+        });
+    } catch (e) {
+        console.error("Layout Image failed to send:", e.message);
+    }
 
-    // Send List second
+    // 2. Send the interactive list (Crucial step)
     return sendWhatsAppMessage(phone, {
         type: "interactive",
         interactive: {
             type: "list",
             header: { type: "text", text: "Ticket Selection" },
-            body: { text: "Please select your seating category:" },
+            body: { text: "Please select your seating category below:" },
             footer: { text: "Music Night Muscat 2026" },
             action: {
                 button: "View Categories",
@@ -246,9 +257,11 @@ async function handleMusicNightFlow(phone, event) {
     }
 
     const cleanMsg = message.toLowerCase().trim();
+    console.log(`[FLOW] Phone: ${phone} | State: ${currentState} | Msg: "${message}"`);
 
     // Trigger word handling
     if (cleanMsg === 'menu' || cleanMsg === 'hi' || cleanMsg === 'music night') {
+        console.log(`[FLOW] Triggering Welcome for ${phone}`);
         // Force reset session data for a clean start
         await db.query(`UPDATE mn_users SET 
             temp_category = NULL, 
