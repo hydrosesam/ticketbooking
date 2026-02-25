@@ -150,7 +150,7 @@ async function showMNBookingSummary(phone, bookingData) {
         `• *Quantity:* ${bookingData.quantity} Ticket(s)\n` +
         `• *Name:* ${bookingData.members.join(", ")}\n\n` +
         `*Total Amount:* OMR ${total.toFixed(2)}\n\n` +
-        `Please confirm to receive your ticket.`;
+        `Please confirm your selection and proceed to payment.`;
 
     return sendWhatsAppMessage(phone, {
         type: "interactive",
@@ -159,12 +159,23 @@ async function showMNBookingSummary(phone, bookingData) {
             body: { text: txt },
             action: {
                 buttons: [
-                    { type: "reply", reply: { id: "CONFIRM_MN_BOOKING", title: "Confirm & Send PDF" } },
+                    { type: "reply", reply: { id: "MN_PROC_PAYMENT", title: "Confirm & Pay" } },
                     { type: "reply", reply: { id: "CANCEL_MN_BOOKING", title: "Cancel" } }
                 ]
             }
         }
     });
+}
+
+async function sendMNPaymentRequest(phone) {
+    const msg = "💳 *Payment Instructions*\n\n" +
+        "Please transfer the total amount to the following account:\n\n" +
+        "*Bank Name:* Muscat Bank\n" +
+        "*Account Name:* Eventz Cloud LLC\n" +
+        "*Account Number:* 1234-5678-9012\n\n" +
+        "📸 Once done, *please send a photo or PDF of your payment slip/receipt here.*";
+
+    return sendText(phone, msg);
 }
 
 function getCategoryPrice(category) {
@@ -230,6 +241,48 @@ async function handleMusicNightFlow(phone, message) {
         return;
     }
 
+    // --- Media Handling (Images/Documents for Payment Slips) ---
+    if (currentState === "MN_PAYMENT_UPLOAD") {
+        let localPath = null;
+        if (typeof message === 'object' && (message.image || message.document)) {
+            const mediaObj = message.image || message.document;
+            try {
+                // 1. Get Media URL from Meta API
+                const mediaRes = await axios.get(`https://graph.facebook.com/v17.0/${mediaObj.id}`, {
+                    headers: { 'Authorization': `Bearer ${WHATSAPP_ACCESS_TOKEN}` }
+                });
+                const mediaUrl = mediaRes.data.url;
+
+                // 2. Download the actual file
+                const fileRes = await axios.get(mediaUrl, {
+                    headers: { 'Authorization': `Bearer ${WHATSAPP_ACCESS_TOKEN}` },
+                    responseType: 'arraybuffer'
+                });
+
+                const ext = message.image ? 'jpg' : 'pdf';
+                const fileName = `slip_${mediaObj.id}.${ext}`;
+                localPath = path.join(__dirname, 'uploads', fileName);
+                fs.writeFileSync(localPath, fileRes.data);
+
+                // We'll store the relative path for the dashboard
+                localPath = `/uploads/${fileName}`;
+            } catch (e) {
+                console.error("Error downloading media:", e);
+            }
+        }
+
+        if (localPath) {
+            await saveTempData(phone, 'slip_url', localPath);
+            await processPendingBooking(phone, user, localPath);
+            return;
+        } else if (typeof message === 'string') {
+            await sendText(phone, "⚠️ Please upload a photo or PDF of your payment slip to proceed.");
+            return;
+        }
+    }
+
+    if (typeof message !== 'string') return; // Skip if not a button/text reply and not in payment state
+
     switch (currentState) {
         case "MN_WELCOME_WAIT":
         case "MN_CATEGORY_SELECT":
@@ -282,8 +335,9 @@ async function handleMusicNightFlow(phone, message) {
             break;
 
         case "MN_CONFIRM_AWAIT":
-            if (message === "CONFIRM_MN_BOOKING") {
-                await processAndSendBooking(phone, user);
+            if (message === "MN_PROC_PAYMENT") {
+                await sendMNPaymentRequest(phone);
+                await saveUserState(phone, "MN_PAYMENT_UPLOAD");
             } else if (message === "CANCEL_MN_BOOKING") {
                 await sendText(phone, "❌ Booking cancelled.");
                 await saveUserState(phone, "MN_MAIN");
@@ -292,7 +346,7 @@ async function handleMusicNightFlow(phone, message) {
     }
 }
 
-async function processAndSendBooking(phone, user) {
+async function processPendingBooking(phone, user, slipUrl) {
     try {
         const timestamp = new Date().getTime();
         const randStr = Math.random().toString(36).substring(2, 6).toUpperCase();
@@ -302,36 +356,61 @@ async function processAndSendBooking(phone, user) {
         const price = getCategoryPrice(user.category);
         const totalAmount = price * user.quantity;
 
-        // Save booking to MySQL database
+        // Save booking to MySQL database as PENDING
         await db.query(
-            `INSERT INTO mn_bookings (booking_no, ticket_id, phone, category, quantity, amount, members) 
-             VALUES (?, ?, ?, ?, ?, ?, ?)`,
-            [bookingNo, ticketId, phone, user.category, user.quantity, totalAmount, JSON.stringify(user.members)]
+            `INSERT INTO mn_bookings (booking_no, ticket_id, phone, category, quantity, amount, members, payment_status, payment_slip_url) 
+             VALUES (?, ?, ?, ?, ?, ?, ?, 'pending', ?)`,
+            [bookingNo, ticketId, phone, user.category, user.quantity, totalAmount, JSON.stringify(user.members), slipUrl]
         );
 
-        // Deduct from inventory
+        // Deduct from inventory (Pre-reserve)
         await db.query(
             `UPDATE mn_inventory SET booked_seats = booked_seats + ? WHERE category = ?`,
             [user.quantity, user.category]
         );
 
+        await sendText(phone, "📥 *Payment Received!*\n\nOur staff will verify your payment slip shortly. Once authorized, your official PDF ticket will be sent to you automatically. Thank you!");
+
+        // Reset State
+        await saveUserState(phone, "MN_MAIN");
+
+    } catch (err) {
+        console.error("Pending booking failed:", err);
+        await sendText(phone, "❌ Sorry, an error occurred while saving your booking. Please contact support.");
+        await saveUserState(phone, "MN_MAIN");
+    }
+}
+
+async function authorizeAndSendTicket(bookingNo) {
+    try {
+        const rows = await db.query("SELECT * FROM mn_bookings WHERE booking_no = ? AND payment_status = 'pending'", [bookingNo]);
+        if (rows.length === 0) return { success: false, error: "Booking not found or already approved." };
+
+        const b = rows[0];
+        const phone = b.phone;
+
+        // Update status
+        await db.query("UPDATE mn_bookings SET payment_status = 'approved' WHERE booking_no = ?", [bookingNo]);
+
         const bookingData = {
-            bookingNo, ticketId, category: user.category, quantity: user.quantity,
-            amount: totalAmount, members: user.members
+            bookingNo: b.booking_no,
+            ticketId: b.ticket_id,
+            category: b.category,
+            quantity: b.quantity,
+            amount: b.amount,
+            members: JSON.parse(b.members)
         };
 
-        // Notify user while PDF generates
-        await sendText(phone, "✅ *Booking Confirmed!*\n\nGenerating your PDF ticket, please wait a moment... ⏳");
+        // Notify user
+        await sendText(phone, "✅ *Payment Verified!*\n\nYour Muscat Star Night 2026 ticket is being generated...");
 
         // Generate PDF
         const pdfBuffer = await generateTicketPDF(bookingData);
-
-        // Save PDF temporarily on server to upload to Meta
-        const fileName = `ticket_${ticketId}.pdf`;
+        const fileName = `ticket_${b.ticket_id}.pdf`;
         const filePath = path.join(__dirname, fileName);
         fs.writeFileSync(filePath, pdfBuffer);
 
-        // Upload PDF to WhatsApp Media API
+        // Upload to Meta
         const form = new (require('form-data'))();
         form.append('file', fs.createReadStream(filePath));
         form.append('messaging_product', 'whatsapp');
@@ -344,26 +423,22 @@ async function processAndSendBooking(phone, user) {
 
         const mediaId = mediaRes.data.id;
 
-        // Send Document Message
+        // Send Document
         await sendWhatsAppMessage(phone, {
             type: "document",
             document: {
                 id: mediaId,
-                caption: `🎉 Your Official Ticket to Muscat Star Night 2026 is here!\n\nBooking No: ${bookingNo}\nKeep this PDF ready at the gates. See you there! 🎶`
+                caption: `🎉 YOUR TICKET IS HERE!\n\nBooking No: ${b.booking_no}\nSee you at Muscat Star Night 2026! 🎶`
             }
         });
 
-        // Clean up file
         fs.unlinkSync(filePath);
-
-        // Reset State
-        await saveUserState(phone, "MN_MAIN");
+        return { success: true };
 
     } catch (err) {
-        console.error("Booking failed:", err);
-        await sendText(phone, "❌ Sorry, an error occurred while processing your booking. Please try again later.");
-        await saveUserState(phone, "MN_MAIN");
+        console.error("Authorization failed:", err);
+        return { success: false, error: err.message };
     }
 }
 
-module.exports = { handleMusicNightFlow };
+module.exports = { handleMusicNightFlow, authorizeAndSendTicket };

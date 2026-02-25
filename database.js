@@ -30,6 +30,7 @@ async function initDatabase() {
                 temp_category VARCHAR(20) DEFAULT NULL,
                 temp_quantity INT DEFAULT NULL,
                 temp_members JSON DEFAULT NULL,
+                temp_slip_url TEXT DEFAULT NULL,
                 last_updated TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP
             )
         `);
@@ -46,6 +47,8 @@ async function initDatabase() {
                 amount DECIMAL(10,2) NOT NULL,
                 members JSON NOT NULL,
                 status VARCHAR(20) DEFAULT 'Confirmed',
+                payment_status VARCHAR(20) DEFAULT 'pending',
+                payment_slip_url TEXT DEFAULT NULL,
                 entry_status VARCHAR(100) DEFAULT NULL,
                 timestamp TIMESTAMP DEFAULT CURRENT_TIMESTAMP
             )
@@ -71,6 +74,18 @@ async function initDatabase() {
             ('SILVER', 300, 0)
         `);
         console.log('✅ Synchronized inventory starting counts.');
+
+        // Simple Migrations for existing tables
+        try {
+            await connection.query("ALTER TABLE mn_users ADD COLUMN temp_slip_url TEXT DEFAULT NULL");
+            console.log('✅ Migration: Added temp_slip_url to mn_users');
+        } catch (e) { }
+
+        try {
+            await connection.query("ALTER TABLE mn_bookings ADD COLUMN payment_status VARCHAR(20) DEFAULT 'pending'");
+            await connection.query("ALTER TABLE mn_bookings ADD COLUMN payment_slip_url TEXT DEFAULT NULL");
+            console.log('✅ Migration: Added payment columns to mn_bookings');
+        } catch (e) { }
 
         connection.release();
     } catch (err) {

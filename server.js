@@ -1,15 +1,19 @@
 const express = require('express');
 const cookieParser = require('cookie-parser');
-const { handleMusicNightFlow } = require('./bot');
+const path = require('path');
+const { handleMusicNightFlow, authorizeAndSendTicket } = require('./bot');
 const db = require('./database');
 require('dotenv').config();
 
 const app = express();
 app.use(express.json());
-app.use(express.urlencoded({ extended: true })); // to support URL-encoded bodies in login forms
+app.use(express.urlencoded({ extended: true }));
 app.use(cookieParser());
 
-const VERIFY_TOKEN = process.env.VERIFY_TOKEN || 'ALTAZA_123'; // Matches Apps Script
+// Serve the uploads folder statically so dashboard can show slips
+app.use('/uploads', express.static(path.join(__dirname, 'uploads')));
+
+const VERIFY_TOKEN = process.env.VERIFY_TOKEN || 'ALTAZA_123';
 const PORT = process.env.PORT || 3000;
 
 // ======================================
@@ -85,6 +89,19 @@ app.get('/logout', (req, res) => {
     res.redirect('/login');
 });
 
+// Admin Approval Endpoint
+app.post('/admin/approve', requireAuth, async (req, res) => {
+    const { bookingNo } = req.body;
+    if (!bookingNo) return res.status(400).json({ error: "Missing Booking No" });
+
+    const result = await authorizeAndSendTicket(bookingNo);
+    if (result.success) {
+        res.json({ success: true });
+    } else {
+        res.status(500).json({ error: result.error });
+    }
+});
+
 // ======================================
 // Webhook Verification (Required by Meta)
 // ======================================
@@ -146,7 +163,6 @@ app.post('/webhook', async (req, res) => {
 app.get('/dashboard', requireAuth, async (req, res) => {
     try {
         const inventoryRows = await db.query("SELECT * FROM mn_inventory");
-        // Removed LIMIT 50 to show ALL tickets as requested
         const bookingRows = await db.query("SELECT * FROM mn_bookings ORDER BY timestamp DESC");
 
         let totalRevenue = 0;
@@ -168,77 +184,134 @@ app.get('/dashboard', requireAuth, async (req, res) => {
 
         let bookingsHtml = bookingRows.map(b => {
             totalRevenue += parseFloat(b.amount);
-            let statusBadge = b.entry_status
-                ? `<span style="background:#e74c3c; color:white; padding:4px 8px; border-radius:4px; font-size:12px; font-weight:bold;">SCANNED</span>`
-                : `<span style="background:#2ecc71; color:white; padding:4px 8px; border-radius:4px; font-size:12px; font-weight:bold;">UNUSED</span>`;
+
+            let entryBadge = b.entry_status
+                ? `<span class="badge red">SCANNED</span>`
+                : `<span class="badge green">UNUSED</span>`;
+
+            let paymentBadge = '';
+            let actionBtn = '';
+
+            if (b.payment_status === 'approved') {
+                paymentBadge = `<span class="badge green">PAID</span>`;
+                actionBtn = `<span style="color:#27ae60; font-size:12px; font-weight:bold;">Verified ✓</span>`;
+            } else {
+                paymentBadge = `<span class="badge orange">PENDING</span>`;
+                actionBtn = `
+                    <div style="display:flex; gap:5px;">
+                        <a href="${b.payment_slip_url}" target="_blank" class="view-btn">View Slip</a>
+                        <button onclick="approveBooking('${b.booking_no}')" class="approve-btn" id="btn-${b.booking_no}">Approve</button>
+                    </div>
+                `;
+            }
 
             return `
-                    <tr>
+                <tr id="row-${b.booking_no}">
                     <td>${b.booking_no}</td>
                     <td>${b.phone}</td>
                     <td>${b.category}</td>
                     <td>${b.quantity}</td>
                     <td>OMR ${b.amount}</td>
-                    <td>${statusBadge}</td>
-                </tr >
+                    <td>${paymentBadge}</td>
+                    <td>${actionBtn}</td>
+                    <td>${entryBadge}</td>
+                </tr>
             `;
         }).join('');
 
         const html = `
-            < !DOCTYPE html >
-                <html>
-                    <head>
-                        <title>Eventz Cloud - Live Ticket Dashboard</title>
-                        <meta name="viewport" content="width=device-width, initial-scale=1">
-                            <style>
-                                body {font - family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; background-color: #f4f7f6; margin: 0; padding: 20px; color: #333; }
-                                h1, h2 {color: #2c3e50; }
-                                .header {display: flex; justify-content: space-between; align-items: center; border-bottom: 2px solid #ddd; padding-bottom: 10px; margin-bottom: 20px; flex-wrap: wrap; gap: 10px; }
-                                .revenue-badge {background - color: #27ae60; color: white; padding: 10px 20px; border-radius: 8px; font-size: 1.2em; font-weight: bold; }
-                                .logout-btn {background - color: #e74c3c; color: white; text-decoration: none; padding: 10px 15px; border-radius: 8px; font-weight: bold; font-size: 14px; }
-                                .grid {display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 20px; margin-bottom: 30px; }
-                                .card {background: white; padding: 20px; border-radius: 8px; box-shadow: 0 4px 6px rgba(0,0,0,0.1); }
-                                .card h3 {margin - top: 0; color: #e74c3c; }
-                                .progress-bar-container {width: 100%; background-color: #ecf0f1; border-radius: 4px; overflow: hidden; margin-top: 10px; }
-                                .progress-bar {height: 10px; background-color: #3498db; }
-                                .progress-bar.danger {background - color: #e74c3c; }
-                                .table-container {width: 100%; overflow-x: auto; background: white; border-radius: 8px; box-shadow: 0 4px 6px rgba(0,0,0,0.1); }
-                                table {width: 100%; border-collapse: collapse; min-width: 600px; }
-                                th, td {padding: 12px 15px; text-align: left; border-bottom: 1px solid #ddd; }
-                                th {background - color: #2c3e50; color: white; white-space: nowrap; }
-                                tr:hover {background - color: #f1f1f1; }
-                            </style>
-                    </head>
-                    <body>
-                        <div class="header">
-                            <div style="display:flex; align-items:center; gap:15px;">
-                                <h1 style="margin:0;">🎫 Live Dashboard</h1>
-                                <a href="/logout" class="logout-btn">Logout</a>
-                            </div>
-                            <div class="revenue-badge">Total Revenue: OMR ${totalRevenue.toFixed(2)}</div>
-                        </div>
+            <!DOCTYPE html>
+            <html>
+            <head>
+                <title>Eventz Cloud - Booking Management</title>
+                <meta name="viewport" content="width=device-width, initial-scale=1">
+                <style>
+                    body { font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; background-color: #f4f7f6; margin: 0; padding: 20px; color: #333; }
+                    h1, h2 { color: #2c3e50; }
+                    .header { display: flex; justify-content: space-between; align-items: center; border-bottom: 2px solid #ddd; padding-bottom: 10px; margin-bottom: 20px; flex-wrap: wrap; gap: 10px; }
+                    .revenue-badge { background-color: #27ae60; color: white; padding: 10px 20px; border-radius: 8px; font-size: 1.2em; font-weight: bold; }
+                    .logout-btn { background-color: #e74c3c; color: white; text-decoration: none; padding: 10px 15px; border-radius: 8px; font-weight: bold; font-size: 14px; }
+                    .grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 20px; margin-bottom: 30px; }
+                    .card { background: white; padding: 20px; border-radius: 8px; box-shadow: 0 4px 6px rgba(0,0,0,0.1); }
+                    .card h3 { margin-top: 0; color: #e74c3c; }
+                    .progress-bar-container { width: 100%; background-color: #ecf0f1; border-radius: 4px; overflow: hidden; margin-top: 10px; }
+                    .progress-bar { height: 10px; background-color: #3498db; }
+                    .progress-bar.danger { background-color: #e74c3c; }
+                    .table-container { width: 100%; overflow-x: auto; background: white; border-radius: 8px; box-shadow: 0 4px 6px rgba(0,0,0,0.1); }
+                    table { width: 100%; border-collapse: collapse; min-width: 800px; }
+                    th, td { padding: 12px 15px; text-align: left; border-bottom: 1px solid #ddd; }
+                    th { background-color: #2c3e50; color: white; white-space: nowrap; }
+                    tr:hover { background-color: #f1f1f1; }
+                    .badge { padding: 4px 8px; border-radius: 4px; font-size: 11px; font-weight: bold; text-transform: uppercase; }
+                    .badge.red { background: #e74c3c; color: white; }
+                    .badge.green { background: #2ecc71; color: white; }
+                    .badge.orange { background: #f39c12; color: white; }
+                    .approve-btn { background: #27ae60; color: white; border: none; padding: 6px 12px; border-radius: 4px; cursor: pointer; font-weight: bold; font-size: 12px; }
+                    .approve-btn:disabled { background: #bdc3c7; }
+                    .view-btn { background: #3498db; color: white; text-decoration: none; padding: 6px 12px; border-radius: 4px; font-size: 12px; font-weight: bold; }
+                </style>
+            </head>
+            <body>
+                <div class="header">
+                    <div style="display:flex; align-items:center; gap:15px;">
+                        <h1 style="margin:0;">🎫 Ticketing Management</h1>
+                        <a href="/logout" class="logout-btn">Logout</a>
+                    </div>
+                    <div class="revenue-badge">Total Revenue: OMR ${totalRevenue.toFixed(2)}</div>
+                </div>
+                
+                <h2>Live Seat Availability</h2>
+                <div class="grid">
+                    ${inventoryHtml}
+                </div>
 
-                        <h2>Live Seat Availability</h2>
-                        <div class="grid">
-                            ${inventoryHtml}
-                        </div>
+                <div style="display:flex; justify-content:space-between; align-items:center;">
+                    <h2>All Bookings</h2>
+                    <span style="color:#7f8c8d; font-weight:bold;">Total Records: ${bookingRows.length}</span>
+                </div>
+                <div class="table-container">
+                    <table>
+                        <thead>
+                            <tr><th>Booking No</th><th>Phone</th><th>Category</th><th>Qty</th><th>Amount</th><th>Verification</th><th>Actions</th><th>Entry</th></tr>
+                        </thead>
+                        <tbody>
+                            ${bookingsHtml}
+                        </tbody>
+                    </table>
+                </div>
 
-                        <div style="display:flex; justify-content:space-between; align-items:center;">
-                            <h2>All Ticket Bookings</h2>
-                            <span style="color:#7f8c8d; font-weight:bold;">Total Records: ${bookingRows.length}</span>
-                        </div>
-                        <div class="table-container">
-                            <table>
-                                <thead>
-                                    <tr><th>Booking No</th><th>Phone</th><th>Category</th><th>Qty</th><th>Amount</th><th>Status</th></tr>
-                                </thead>
-                                <tbody>
-                                    ${bookingsHtml}
-                                </tbody>
-                            </table>
-                        </div>
-                    </body>
-                </html>
+                <script>
+                    async function approveBooking(bookingNo) {
+                        if(!confirm('Authorize payment for ' + bookingNo + '? This will send the PDF ticket to the customer.')) return;
+                        
+                        const btn = document.getElementById('btn-' + bookingNo);
+                        btn.disabled = true;
+                        btn.innerText = 'Sending...';
+
+                        try {
+                            const response = await fetch('/admin/approve', {
+                                method: 'POST',
+                                headers: { 'Content-Type': 'application/json' },
+                                body: JSON.stringify({ bookingNo })
+                            });
+                            const data = await response.json();
+                            if (data.success) {
+                                alert('Success! Ticket sent to customer WhatsApp.');
+                                location.reload();
+                            } else {
+                                alert('Error: ' + data.error);
+                                btn.disabled = false;
+                                btn.innerText = 'Approve';
+                            }
+                        } catch (e) {
+                            alert('Network Error');
+                            btn.disabled = false;
+                            btn.innerText = 'Approve';
+                        }
+                    }
+                </script>
+            </body>
+            </html>
         `;
         res.send(html);
     } catch (err) {
