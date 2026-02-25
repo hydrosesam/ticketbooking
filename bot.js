@@ -4,8 +4,8 @@ const path = require('path');
 const db = require('./database');
 const { generateTicketPDF } = require('./pdf_generator');
 
-const WHATSAPP_ACCESS_TOKEN = process.env.WHATSAPP_ACCESS_TOKEN || 'EAAVHjKkZBE3IBO3O7bQyC9yZAZAz2eXZB74ZBvGqY5bE2wJZA1H27i1LpZCkPZA8W37eYjZBq6V4rONZCPk1d9LqL5ZCDx2X5dYjZBNvN60wZCY5jZBUQ8v2eX2ZCHjG2j2hJZB4r1ZCH7eNjMZB77e7e6ZBqZCV4r1ZCG4j2'; // Placeholder
-const PHONE_NUMBER_ID = process.env.WHATSAPP_PHONE_NUMBER_ID || '550181748169976'; // Placeholder
+const WHATSAPP_ACCESS_TOKEN = process.env.WHATSAPP_ACCESS_TOKEN || 'EAAdPlcYFproBQLR1YAW2X176hNT7bHwfKIWhZCBlbH5b3BChXhah9gViOQLZBwycsCuSUuqN8gzJZA9vZBBCcRZBXZBdZCk8zHwuIsLnuS3k5HFnqSPeIZCZC0kSBWGTNisu6DLYWZA8LjIuAfnBkU5E9aQiQJVczG3naqaCi1siCPTj8UBENXZBNmEptcw4yupBUtFyQZDZD';
+const PHONE_NUMBER_ID = process.env.WHATSAPP_PHONE_NUMBER_ID || '658261390699917';
 
 async function sendWhatsAppMessage(phone, data) {
     try {
