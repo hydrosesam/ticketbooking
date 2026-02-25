@@ -53,21 +53,14 @@ async function sendMNWelcome(phone) {
 
     const imageUrl = "https://lh3.googleusercontent.com/d/1Aosg-daRT0Dp8_lhxy7mNNS_WnlWoBL9";
 
-    // 1. Try sending the promotional image first
-    try {
-        await sendWhatsAppMessage(phone, {
-            type: "image",
-            image: { link: imageUrl }
-        });
-    } catch (e) {
-        console.error("Welcome image fail:", e.message);
-    }
-
-    // 2. Send interactive message (Always sent)
     return sendWhatsAppMessage(phone, {
         type: "interactive",
         interactive: {
             type: "button",
+            header: {
+                type: "image",
+                image: { link: imageUrl }
+            },
             body: { text: msg },
             action: {
                 buttons: [
