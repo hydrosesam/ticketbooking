@@ -180,14 +180,23 @@ async function showMNBookingSummary(phone, bookingData) {
 }
 
 async function sendMNPaymentRequest(phone) {
-    const msg = "💳 *Payment Instructions*\n\n" +
-        "Please transfer the total amount to the following account:\n\n" +
-        "*Bank Name:* Muscat Bank\n" +
-        "*Account Name:* Eventz Cloud LLC\n" +
-        "*Account Number:* 1234-5678-9012\n\n" +
-        "📸 Once done, *please send a photo or PDF of your payment slip/receipt here.*";
+    const paymentQrUrl = "https://lh3.googleusercontent.com/d/1PgQY8UgeUxsbv7KKs0J-G5bMQhMx5n9U";
 
-    return sendText(phone, msg);
+    // 1. Send the payment QR Code
+    try {
+        await sendWhatsAppMessage(phone, {
+            type: "image",
+            image: {
+                link: paymentQrUrl,
+                caption: "💳 *Scan to Pay*\n\nPlease scan the QR code above to complete your payment."
+            }
+        });
+    } catch (e) {
+        console.error("Payment QR failed to send:", e.message);
+    }
+
+    // 2. Request the slip
+    return sendText(phone, "📸 After payment, *please send a photo or PDF of your payment slip here* so we can issue your ticket.");
 }
 
 function getCategoryPrice(category) {
