@@ -184,6 +184,21 @@ function getCategoryPrice(category) {
 }
 
 // ---------------------------------------------------------
+// HELPERS
+// ---------------------------------------------------------
+
+function safeJsonParse(data) {
+    if (!data) return [];
+    if (typeof data !== 'string') return data;
+    try {
+        const parsed = JSON.parse(data);
+        return Array.isArray(parsed) ? parsed : [parsed];
+    } catch (e) {
+        return [data]; // Return as single-element array if not valid JSON
+    }
+}
+
+// ---------------------------------------------------------
 // STATE MANAGEMENT & LOGIC
 // ---------------------------------------------------------
 
@@ -194,7 +209,7 @@ async function getUserState(phone) {
             state: rows[0].state,
             category: rows[0].temp_category,
             quantity: rows[0].temp_quantity,
-            members: rows[0].temp_members
+            members: safeJsonParse(rows[0].temp_members)
         };
     }
     await db.query("INSERT INTO mn_users (phone_number, state) VALUES (?, 'MN_MAIN')", [phone]);
@@ -206,10 +221,11 @@ async function saveUserState(phone, state) {
 }
 
 async function saveTempData(phone, field, value) {
-    if (field === 'members') {
-        value = JSON.stringify(value);
+    let finalValue = value;
+    if (field === 'members' && typeof value !== 'string') {
+        finalValue = JSON.stringify(value);
     }
-    await db.query(`UPDATE mn_users SET temp_${field} = ? WHERE phone_number = ?`, [value, phone]);
+    await db.query(`UPDATE mn_users SET temp_${field} = ? WHERE phone_number = ?`, [finalValue, phone]);
 }
 
 async function handleMusicNightFlow(phone, event) {
@@ -406,7 +422,7 @@ async function authorizeAndSendTicket(bookingNo) {
             category: b.category,
             quantity: b.quantity,
             amount: b.amount,
-            members: JSON.parse(b.members)
+            members: safeJsonParse(b.members)
         };
 
         // Notify user
