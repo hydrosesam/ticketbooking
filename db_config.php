@@ -4,10 +4,10 @@
  * Provide your phpMyAdmin (MySQL) details here.
  */
 
-define('DB_HOST', 'localhost');
-define('DB_USER', 'kumarjobs_fest_user'); // Replace with your MySQL username
-define('DB_PASS', 'RI93xV6O+2LFL+{)');       // Replace with your MySQL password
-define('DB_NAME', 'kumarjobs_fest_db');     // Replace with your Database name
+define('DB_HOST', 'interchange.proxy.rlwy.net:36032');
+define('DB_USER', 'root');
+define('DB_PASS', 'NcxrttDtfqsAvxcQDIdQnvNCuRSqLnYf');
+define('DB_NAME', 'railway');
 
 /**
  * Establish Database Connection

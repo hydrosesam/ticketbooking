@@ -2,12 +2,13 @@ const mysql = require('mysql2/promise');
 require('dotenv').config();
 
 // Create the connection pool
-// Railway / Cloud providers typically use a single database URL string
+// Railway MYSQL_URL connection string is the primary source
 const dbConfig = process.env.MYSQL_URL || process.env.DATABASE_URL || {
-    host: process.env.DB_HOST || 'localhost',
-    user: process.env.DB_USER || 'kumarjobs_fest_user',
-    password: process.env.DB_PASSWORD || 'RI93xV6O+2LFL+{)',
-    database: process.env.DB_NAME || 'kumarjobs_fest_db',
+    host: process.env.DB_HOST || 'interchange.proxy.rlwy.net',
+    port: 36032,
+    user: process.env.DB_USER || 'root',
+    password: process.env.DB_PASSWORD || 'NcxrttDtfqsAvxcQDIdQnvNCuRSqLnYf',
+    database: process.env.DB_NAME || 'railway',
     waitForConnections: true,
     connectionLimit: 10,
     queueLimit: 0,
