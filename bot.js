@@ -248,6 +248,14 @@ async function handleMusicNightFlow(phone, event) {
 
     // Trigger word handling
     if (cleanMsg === 'menu' || cleanMsg === 'hi' || cleanMsg === 'music night') {
+        // Force reset session data for a clean start
+        await db.query(`UPDATE mn_users SET 
+            temp_category = NULL, 
+            temp_quantity = NULL, 
+            temp_members = NULL, 
+            temp_slip_url = NULL 
+            WHERE phone_number = ?`, [phone]);
+
         await sendMNWelcome(phone);
         await saveUserState(phone, "MN_WELCOME_WAIT");
         return;
@@ -383,6 +391,7 @@ async function processPendingBooking(phone, user, slipUrl) {
         const totalAmount = price * user.quantity;
 
         // Save booking to MySQL database as PENDING
+        console.log(`[DB] Inserting pending booking ${bookingNo} for ${phone}`);
         await db.query(
             `INSERT INTO mn_bookings (booking_no, ticket_id, phone, category, quantity, amount, members, payment_status, payment_slip_url) 
              VALUES (?, ?, ?, ?, ?, ?, ?, 'pending', ?)`,
@@ -390,6 +399,7 @@ async function processPendingBooking(phone, user, slipUrl) {
         );
 
         // Deduct from inventory (Pre-reserve)
+        console.log(`[DB] Updating inventory for ${user.category} (-${user.quantity})`);
         await db.query(
             `UPDATE mn_inventory SET booked_seats = booked_seats + ? WHERE category = ?`,
             [user.quantity, user.category]
