@@ -70,11 +70,18 @@ async function initDatabase() {
             CREATE TABLE IF NOT EXISTS mn_admins (
                 phone VARCHAR(20) PRIMARY KEY,
                 name VARCHAR(50) DEFAULT 'Admin',
+                role VARCHAR(20) DEFAULT 'admin',
                 is_active BOOLEAN DEFAULT TRUE,
                 created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
             )
         `);
         console.log('✅ Checked/Created table: mn_admins');
+
+        // Simple Migrations for existing tables
+        try {
+            await connection.query("ALTER TABLE mn_admins ADD COLUMN role VARCHAR(20) DEFAULT 'admin'");
+            console.log('✅ Migration: Added role to mn_admins');
+        } catch (e) { }
 
         // 5. Create mn_otp table
         await connection.query(`

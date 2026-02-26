@@ -20,12 +20,18 @@ const PORT = process.env.PORT || 3000;
 // Authentication System
 // ======================================
 
-function requireAuth(req, res, next) {
-    if (req.cookies.auth === 'true') {
-        next();
-    } else {
-        res.redirect(`/login-phone?next=${encodeURIComponent(req.path)}`);
+async function requireAuth(req, res, next) {
+    const authPhone = req.cookies.auth;
+    if (authPhone) {
+        try {
+            const rows = await db.query("SELECT * FROM mn_admins WHERE phone = ? AND is_active = TRUE", [authPhone]);
+            if (rows.length > 0) {
+                req.admin = rows[0];
+                return next();
+            }
+        } catch (e) { }
     }
+    res.redirect(`/login-phone?next=${encodeURIComponent(req.path)}`);
 }
 
 app.get('/login-phone', (req, res) => {
@@ -109,7 +115,7 @@ app.post('/login-otp', async (req, res) => {
 
     if (rows.length > 0) {
         await db.query("DELETE FROM mn_otp WHERE phone = ?", [phone]);
-        res.cookie('auth', 'true', { maxAge: 8 * 60 * 60 * 1000, httpOnly: true });
+        res.cookie('auth', phone, { maxAge: 8 * 60 * 60 * 1000, httpOnly: true });
         res.redirect('/dashboard');
     } else {
         res.redirect(`/login-otp?phone=${phone}&error=true`);
@@ -149,10 +155,12 @@ app.post('/admin/approve', requireAuth, async (req, res) => {
 
 // Admin Management API
 app.post('/admin/add', requireAuth, async (req, res) => {
-    const { phone, name } = req.body;
+    if (req.admin.role !== 'admin') return res.status(403).json({ error: "Unauthorized" });
+
+    const { phone, name, role } = req.body;
     if (!phone) return res.status(400).json({ error: "Phone number required" });
     try {
-        await db.query("INSERT IGNORE INTO mn_admins (phone, name) VALUES (?, ?)", [phone, name || 'Staff']);
+        await db.query("INSERT INTO mn_admins (phone, name, role) VALUES (?, ?, ?) ON DUPLICATE KEY UPDATE name=VALUES(name), role=VALUES(role)", [phone, name || 'Staff', role || 'admin']);
         res.json({ success: true });
     } catch (err) {
         res.status(500).json({ error: err.message });
@@ -239,14 +247,20 @@ app.get('/dashboard', requireAuth, async (req, res) => {
             });
         };
 
+        const admin = req.admin;
+        const isAdmin = admin.role === 'admin';
+
         let totalRevenue = 0;
         let collected = 0;
         let receivable = 0;
-        bookingRows.forEach(b => {
-            totalRevenue += parseFloat(b.amount || 0);
-            if (b.payment_status === 'approved') collected += parseFloat(b.amount || 0);
-            else receivable += parseFloat(b.amount || 0);
-        });
+
+        if (isAdmin) {
+            bookingRows.forEach(b => {
+                totalRevenue += parseFloat(b.amount || 0);
+                if (b.payment_status === 'approved') collected += parseFloat(b.amount || 0);
+                else receivable += parseFloat(b.amount || 0);
+            });
+        }
 
         const html = `
 <!DOCTYPE html>
@@ -336,14 +350,14 @@ app.get('/dashboard', requireAuth, async (req, res) => {
         .table-header { padding: 25px 30px; background: #fbfcfe; border-bottom: 1px solid #f1f5f9; display: flex; justify-content: space-between; align-items: center; }
         .table-header h2 { margin: 0; font-size: 20px; font-weight: 800; color: var(--primary); }
         
-        .table-wrap { overflow-x: auto; }
-        table { width: 100%; border-collapse: collapse; min-width: 800px; }
-        th { padding: 18px 30px; text-align: left; font-size: 13px; color: #64748b; text-transform: uppercase; letter-spacing: 1px; background: #fbfcfe; border-bottom: 1px solid #f1f5f9; }
-        td { padding: 20px 30px; border-bottom: 1px solid #f8fafc; font-size: 15px; color: #334155; }
+        .table-wrap { overflow-x: auto; -webkit-overflow-scrolling: touch; }
+        table { width: 100%; border-collapse: collapse; min-width: 600px; }
+        th { padding: 18px 20px; text-align: left; font-size: 12px; color: #64748b; text-transform: uppercase; letter-spacing: 1px; background: #fbfcfe; border-bottom: 1px solid #f1f5f9; white-space: nowrap; }
+        td { padding: 15px 20px; border-bottom: 1px solid #f8fafc; font-size: 14px; color: #334155; }
         tr:last-child td { border-bottom: none; }
         tr:hover { background: #fdfdff; }
 
-        .badge { padding: 6px 14px; border-radius: 50px; font-weight: 800; font-size: 11px; text-transform: uppercase; }
+        .badge { padding: 6px 14px; border-radius: 50px; font-weight: 800; font-size: 11px; text-transform: uppercase; white-space: nowrap; display: inline-block; }
         .badge.pending { background: #fff8e1; color: #ffab00; }
         .badge.paid { background: #e8f5e9; color: #2e7d32; }
         .badge.scanned { background: #fee2e2; color: #ef4444; }
@@ -367,11 +381,18 @@ app.get('/dashboard', requireAuth, async (req, res) => {
         .result-box { background: white; border-radius: 32px; width: 100%; max-width: 450px; overflow: hidden; }
 
         @media (max-width: 900px) {
-            .sidebar { transform: translateX(-100%); width: 100%; }
+            .sidebar { transform: translateX(-100%); width: 280px; box-shadow: var(--shadow); }
             .sidebar.open { transform: translateX(0); }
-            .main-content { margin-left: 0; padding: 20px; }
+            .main-content { margin-left: 0; padding: 15px; width: 100%; box-sizing: border-box; }
             .mobile-header { display: flex; }
-            .stats-grid { gap: 15px; }
+            .stats-grid { gap: 15px; grid-template-columns: 1fr; }
+            .card-table { border-radius: 16px; margin-bottom: 20px; }
+            .table-header { padding: 15px 20px; flex-direction: column; align-items: flex-start; gap: 10px;}
+            .table-header h2 { font-size: 18px; }
+            .stat-card { padding: 20px; }
+            h1 { font-size: 24px !important; }
+            .pagination { flex-wrap: wrap; }
+            .page-btn { padding: 6px 12px; font-size: 13px; }
         }
     </style>
 </head>
@@ -389,13 +410,15 @@ app.get('/dashboard', requireAuth, async (req, res) => {
                 <h2>EVENTZ CLOUD</h2>
             </div>
             <div class="nav">
+                ${isAdmin ? `
                 <div class="nav-item active" onclick="showTab('overview', this)">📊 Overview</div>
                 <div class="nav-item" onclick="showTab('pending', this)">🕒 Pending</div>
                 <div class="nav-item" onclick="showTab('approved', this)">✅ Approved</div>
                 <div class="nav-item" onclick="showTab('balance', this)">💰 Balance</div>
-                <div class="nav-item" onclick="showTab('scanner', this)">📷 Scan Ticket</div>
+                ` : ''}
+                <div class="nav-item ${!isAdmin ? 'active' : ''}" onclick="showTab('scanner', this)">📷 Scan Ticket</div>
                 <div class="nav-item" onclick="showTab('history', this)">🏁 Verified List</div>
-                <div class="nav-item" onclick="showTab('admins', this)">👤 Admins</div>
+                ${isAdmin ? `<div class="nav-item" onclick="showTab('admins', this)">👤 Admins</div>` : ''}
             </div>
             <div class="logout-area">
                 <button class="btn-logout" onclick="location.href='/logout'">LOGOUT</button>
@@ -405,6 +428,7 @@ app.get('/dashboard', requireAuth, async (req, res) => {
         <!-- Main Content -->
         <div class="main-content">
             
+            ${isAdmin ? `
             <!-- OVERVIEW SECTION -->
             <div id="overview" class="section active">
                 <div style="margin-bottom: 30px;">
@@ -439,7 +463,7 @@ app.get('/dashboard', requireAuth, async (req, res) => {
                         `;
         }).join('')}
                 </div>
- 
+
                 <div class="card-table">
                     <div class="table-header"><h2>Recent Pending Approvals (Last 10)</h2></div>
                     <div class="table-wrap">
@@ -463,7 +487,7 @@ app.get('/dashboard', requireAuth, async (req, res) => {
                                         </div>
                                     </td>
                                 </tr>`).join('')}
-                                ${pendingRows.length === 0 ? '<tr><td colspan="6" style="text-align:center; padding:40px;">All caught up!</td></tr>' : ''}
+                                ${pendingRows.length === 0 ? '<tr><td colspan="7" style="text-align:center; padding:40px;">All caught up!</td></tr>' : ''}
                             </tbody>
                         </table>
                     </div>
@@ -501,7 +525,7 @@ app.get('/dashboard', requireAuth, async (req, res) => {
                     <div class="pagination" id="pag-pending"></div>
                 </div>
             </div>
- 
+
             <!-- APPROVED SECTION -->
             <div id="approved" class="section">
                <div class="card-table">
@@ -528,14 +552,14 @@ app.get('/dashboard', requireAuth, async (req, res) => {
                     <div class="pagination" id="pag-approved"></div>
                 </div>
             </div>
- 
+
             <!-- BALANCE SECTION -->
             <div id="balance" class="section">
                 <div style="margin-bottom: 30px;">
                     <h1 style="margin:0; font-size:28px; font-weight:800;">Financial Overview</h1>
                     <p style="color:#64748b;">Live revenue and receivable tracking</p>
                 </div>
- 
+
                 <div class="stats-grid">
                     <div class="stat-card">
                         <h3>Total Collected (Approved)</h3>
@@ -553,7 +577,7 @@ app.get('/dashboard', requireAuth, async (req, res) => {
                         <p style="color:#64748b; font-size:12px; margin:0;">Cumulative sales</p>
                     </div>
                 </div>
- 
+
                 <div class="card-table">
                     <div class="table-header"><h2>All Transactions Log</h2></div>
                     <div class="table-wrap">
@@ -577,17 +601,22 @@ app.get('/dashboard', requireAuth, async (req, res) => {
                     <div class="pagination" id="pag-balance"></div>
                 </div>
             </div>
+            ` : ''}
 
             <!-- SCANNER SECTION -->
-            <div id="scanner" class="section">
-                <div id="scanner-ui">
+            <div id="scanner" class="section ${!isAdmin ? 'active' : ''}">
+                <div id="scanner-ui" style="padding-top:20px;">
                     <div style="text-align:center; margin-bottom:30px;">
                         <h2 style="font-weight:800; font-size:24px;">Ticket Verification</h2>
-                        <p style="color:#64748b;">Open camera to scan QR codes for gate entry</p>
+                        <p style="color:#64748b;">Open camera or enter 12-digit ticket ID</p>
+                        
+                        <input type="text" id="manual-ticket-input" placeholder="Enter 12-digit ID" maxlength="12" style="padding:15px; font-size:18px; text-align:center; border:2px solid #e2e8f0; border-radius:12px; margin-top:10px; width:100%; max-width:300px; text-transform:uppercase;">
+                        <br>
+                        
                         <button class="btn-action btn-approve" style="padding:15px 40px; font-size:16px; margin-top:20px;" onclick="startScanner()">OPEN CAMERA</button>
                     </div>
                     
-                    <div id="scanner-container" style="display:none;">
+                    <div id="scanner-container" style="display:none; position:relative;">
                         <div id="reader"></div>
                         <div id="scanner-error" style="background:var(--danger); color:white; padding:10px; font-size:12px; display:none; text-align:center; border-radius:0 0 20px 20px;"></div>
                         <button class="btn-logout" style="margin-top:20px;" onclick="stopScanner()">CANCEL SCAN</button>
@@ -621,6 +650,7 @@ app.get('/dashboard', requireAuth, async (req, res) => {
                 </div>
             </div>
 
+            ${isAdmin ? `
             <!-- ADMINS SECTION -->
             <div id="admins" class="section">
                 <div style="margin-bottom: 30px; display:flex; justify-content:space-between; align-items:center;">
@@ -636,24 +666,23 @@ app.get('/dashboard', requireAuth, async (req, res) => {
                     <div class="table-wrap">
                         <table>
                             <thead>
-                                <tr><th>Name</th><th>WhatsApp Number</th><th>Created</th><th>Action</th></tr>
+                                <tr><th>Name</th><th>WhatsApp Number</th><th>Role</th><th>Action</th></tr>
                             </thead>
                             <tbody>
                                 ${adminRows.map(a => `
                                 <tr>
                                     <td><strong>${a.name}</strong></td>
                                     <td>${a.phone}</td>
-                                    <td>${new Date(a.created_at).toLocaleDateString()}</td>
+                                    <td><span class="badge ${a.role === 'admin' ? 'paid' : 'unused'}">${a.role}</span></td>
                                     <td>
                                         <button onclick="deleteAdmin('${a.phone}')" class="btn-action" style="background:var(--danger); color:white;">Remove</button>
                                     </td>
                                 </tr>`).join('')}
                             </tbody>
                         </table>
-                    </div>
                 </div>
             </div>
-
+            ` : ''}
         </div>
     </div>
 
@@ -813,6 +842,20 @@ app.get('/dashboard', requireAuth, async (req, res) => {
             document.getElementById('scanner-container').style.display = 'none';
         }
 
+        document.addEventListener('DOMContentLoaded', function() {
+            var manualInput = document.getElementById('manual-ticket-input');
+            if (manualInput) {
+                manualInput.addEventListener('input', function(e) {
+                    this.value = this.value.toUpperCase();
+                    if (this.value.length === 12) {
+                        processTicket(this.value);
+                        this.value = '';
+                        this.blur();
+                    }
+                });
+            }
+        });
+
         async function processTicket(tId) {
             activeTicketId = tId;
             var overlay = document.getElementById('res-overlay');
@@ -899,12 +942,13 @@ app.get('/dashboard', requireAuth, async (req, res) => {
         async function addAdmin() {
             var phone = document.getElementById('new-admin-phone').value;
             var name = document.getElementById('new-admin-name').value;
+            var role = document.getElementById('new-admin-role').value;
             if (!phone) return alert('Phone required');
             try {
                 var res = await fetch('/admin/add', {
                     method: 'POST',
                     headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify({ phone: phone, name: name })
+                    body: JSON.stringify({ phone, name, role })
                 });
                 if (res.ok) location.reload(); else alert('Failed to add');
             } catch(e) { alert('Error'); }
@@ -924,18 +968,22 @@ app.get('/dashboard', requireAuth, async (req, res) => {
     </script>
 
     <!-- Add Admin Modal -->
-    <div id="add-admin-modal" style="position:fixed; top:0; left:0; width:100%; height:100%; background:rgba(0,0,0,0.8); display:none; justify-content:center; align-items:center; z-index:2000;">
-        <div style="background:white; padding:40px; border-radius:30px; width:90%; max-width:400px;">
-            <h2 style="margin-top:0;">Add New Staff</h2>
-            <p style="color:#64748b; font-size:14px;">They will receive OTPs and payment notifications via WhatsApp.</p>
-            <input type="text" id="new-admin-name" placeholder="Staff Name" class="edit-input" style="width:100%; margin-bottom:15px; text-align:left; padding:12px;">
-            <input type="text" id="new-admin-phone" placeholder="91XXXXXXXXXX" class="edit-input" style="width:100%; margin-bottom:20px; text-align:left; padding:12px;">
-            <div style="display:flex; gap:10px;">
-                <button class="btn-action btn-approve" style="flex:1;" onclick="addAdmin()">ADD ADMIN</button>
-                <button class="btn-logout" style="flex:1; background:#eee; color:#222;" onclick="document.getElementById('add-admin-modal').style.display='none'">CANCEL</button>
+        <div id="add-admin-modal" style="position:fixed; top:0; left:0; width:100%; height:100%; background:rgba(0,0,0,0.8); display:none; justify-content:center; align-items:center; z-index:2000;">
+            <div style="background:white; padding:40px; border-radius:30px; width:90%; max-width:400px;">
+                <h2 style="margin-top:0;">Add New Staff</h2>
+                <p style="color:#64748b; font-size:14px;">They will receive OTPs and payment notifications via WhatsApp.</p>
+                <input type="text" id="new-admin-name" placeholder="Staff Name" class="edit-input" style="width:100%; margin-bottom:15px; text-align:left; padding:12px;">
+                    <input type="text" id="new-admin-phone" placeholder="91XXXXXXXXXX" class="edit-input" style="width:100%; margin-bottom:15px; text-align:left; padding:12px;">
+                        <select id="new-admin-role" class="edit-input" style="width:100%; margin-bottom:20px; text-align:left; padding:12px; font-weight:normal;">
+                            <option value="admin">Full Admin (All Access)</option>
+                            <option value="scanner">Gate Staff (Scanner Only)</option>
+                        </select>
+                        <div style="display:flex; gap:10px;">
+                            <button class="btn-action btn-approve" style="flex:1;" onclick="addAdmin()">ADD STAFF</button>
+                            <button class="btn-logout" style="flex:1; background:#eee; color:#222;" onclick="document.getElementById('add-admin-modal').style.display='none'">CANCEL</button>
+                        </div>
+                    </div>
             </div>
-        </div>
-    </div>
 </body>
 </html>
         `;
@@ -993,6 +1041,6 @@ app.post('/verify/confirm', async (req, res) => {
 // Start Server
 // ======================================
 app.listen(PORT, '0.0.0.0', () => {
-    console.log(`🚀 Node.js Server listening on port ${PORT}`);
+    console.log(`🚀 Node.js Server listening on port ${PORT} `);
     console.log(`🔗 Webhook endpoint: http://localhost:${PORT}/webhook`);
 });
