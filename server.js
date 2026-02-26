@@ -201,7 +201,13 @@ app.get('/dashboard', requireAuth, async (req, res) => {
         const verifiedRows = await db.query("SELECT * FROM mn_bookings WHERE entry_status IS NOT NULL ORDER BY entry_status DESC");
 
         let totalRevenue = 0;
-        bookingRows.forEach(b => totalRevenue += parseFloat(b.amount || 0));
+        let collected = 0;
+        let receivable = 0;
+        bookingRows.forEach(b => {
+            totalRevenue += parseFloat(b.amount || 0);
+            if (b.payment_status === 'approved') collected += parseFloat(b.amount || 0);
+            else receivable += parseFloat(b.amount || 0);
+        });
 
         const html = `
 <!DOCTYPE html>
@@ -260,6 +266,12 @@ app.get('/dashboard', requireAuth, async (req, res) => {
         .inventory-edit.active { display: flex; }
         .edit-input { width: 60px; padding: 5px; border: 1px solid #ddd; border-radius: 8px; font-weight: bold; text-align: center; }
         .btn-mini { padding: 5px 10px; font-size: 11px; border-radius: 6px; }
+ 
+        .pagination { display: flex; justify-content: center; gap: 10px; margin: 20px 0; align-items: center; }
+        .page-btn { padding: 8px 16px; background: white; border: 1px solid #e2e8f0; border-radius: 8px; cursor: pointer; font-weight: 600; transition: 0.3s; }
+        .page-btn:hover { background: #f8fafc; border-color: var(--primary); color: var(--primary); }
+        .page-btn:disabled { opacity: 0.5; cursor: not-allowed; }
+        .page-info { font-weight: 600; color: #64748b; }
 
         .logout-area { padding: 30px; border-top: 1px solid rgba(255,255,255,0.1); }
         .btn-logout { width: 100%; padding: 12px; background: rgba(255,255,255,0.1); border: none; border-radius: 12px; color: white; cursor: pointer; font-weight: 700; transition: 0.3s; }
@@ -341,6 +353,7 @@ app.get('/dashboard', requireAuth, async (req, res) => {
                 <div class="nav-item active" onclick="showTab('overview', this)">📊 Overview</div>
                 <div class="nav-item" onclick="showTab('pending', this)">🕒 Pending</div>
                 <div class="nav-item" onclick="showTab('approved', this)">✅ Approved</div>
+                <div class="nav-item" onclick="showTab('balance', this)">💰 Balance</div>
                 <div class="nav-item" onclick="showTab('scanner', this)">📷 Scan Ticket</div>
                 <div class="nav-item" onclick="showTab('history', this)">🏁 Verified List</div>
             </div>
@@ -386,6 +399,35 @@ app.get('/dashboard', requireAuth, async (req, res) => {
                         `;
         }).join('')}
                 </div>
+ 
+                <div class="card-table">
+                    <div class="table-header"><h2>Recent Pending Approvals (Last 10)</h2></div>
+                    <div class="table-wrap">
+                        <table>
+                            <thead>
+                                <tr><th>Booking</th><th>Phone</th><th>Category</th><th>Qty</th><th>Verification</th><th>Action</th></tr>
+                            </thead>
+                            <tbody>
+                                ${pendingRows.slice(0, 10).map(b => `
+                                <tr>
+                                    <td><strong>${b.booking_no}</strong></td>
+                                    <td><a href="https://wa.me/${b.phone}" target="_blank" style="color:var(--primary); font-weight:600;">${b.phone}</a></td>
+                                    <td><span class="badge unused">${b.category}</span></td>
+                                    <td>${b.quantity}</td>
+                                    <td><span class="badge pending">AWAITING</span></td>
+                                    <td>
+                                        <div style="display:flex; gap:8px;">
+                                            <a href="${b.payment_slip_url}" target="_blank" class="btn-view">Slip</a>
+                                            <button onclick="approveBooking('${b.booking_no}')" class="btn-action btn-approve">Approve</button>
+                                        </div>
+                                    </td>
+                                </tr>`).join('')}
+                                ${pendingRows.length === 0 ? '<tr><td colspan="6" style="text-align:center; padding:40px;">All caught up!</td></tr>' : ''}
+                            </tbody>
+                        </table>
+                    </div>
+                </div>
+            </div>
 
             <!-- PENDING SECTION -->
             <div id="pending" class="section">
@@ -411,10 +453,10 @@ app.get('/dashboard', requireAuth, async (req, res) => {
                                         </div>
                                     </td>
                                 </tr>`).join('')}
-                                ${pendingRows.length === 0 ? '<tr><td colspan="6" style="text-align:center; padding:40px; color:#94a3b8;">No unapproved tickets.</td></tr>' : ''}
                             </tbody>
                         </table>
                     </div>
+                    <div class="pagination" id="pag-pending"></div>
                 </div>
             </div>
  
@@ -437,10 +479,58 @@ app.get('/dashboard', requireAuth, async (req, res) => {
                                     <td><span class="badge paid">APPROVED</span></td>
                                     <td><span class="badge ${b.entry_status ? 'scanned' : 'unused'}">${b.entry_status ? 'IN' : 'OUT'}</span></td>
                                 </tr>`).join('')}
-                                ${approvedRows.length === 0 ? '<tr><td colspan="6" style="text-align:center; padding:40px;">No tickets approved yet.</td></tr>' : ''}
                             </tbody>
                         </table>
                     </div>
+                    <div class="pagination" id="pag-approved"></div>
+                </div>
+            </div>
+ 
+            <!-- BALANCE SECTION -->
+            <div id="balance" class="section">
+                <div style="margin-bottom: 30px;">
+                    <h1 style="margin:0; font-size:28px; font-weight:800;">Financial Overview</h1>
+                    <p style="color:#64748b;">Live revenue and receivable tracking</p>
+                </div>
+ 
+                <div class="stats-grid">
+                    <div class="stat-card">
+                        <h3>Total Collected (Approved)</h3>
+                        <span class="val" style="color:var(--success);">OMR ${collected.toFixed(2)}</span>
+                        <p style="color:#64748b; font-size:12px; margin:0;">Money in bank</p>
+                    </div>
+                    <div class="stat-card">
+                        <h3>Total Receivable (Pending)</h3>
+                        <span class="val" style="color:var(--warning);">OMR ${receivable.toFixed(2)}</span>
+                        <p style="color:#64748b; font-size:12px; margin:0;">Awaiting verification</p>
+                    </div>
+                    <div class="stat-card">
+                        <h3>Grand Total Revenue</h3>
+                        <span class="val" style="color:var(--primary);">OMR ${totalRevenue.toFixed(2)}</span>
+                        <p style="color:#64748b; font-size:12px; margin:0;">Cumulative sales</p>
+                    </div>
+                </div>
+ 
+                <div class="card-table">
+                    <div class="table-header"><h2>All Transactions Log</h2></div>
+                    <div class="table-wrap">
+                        <table>
+                            <thead>
+                                <tr><th>Booking</th><th>Customer Info</th><th>Category</th><th>Amount</th><th>Status</th></tr>
+                            </thead>
+                            <tbody>
+                                ${bookingRows.map(b => `
+                                <tr>
+                                    <td><strong>${b.booking_no}</strong></td>
+                                    <td>${b.phone}</td>
+                                    <td>${b.category}</td>
+                                    <td><strong>OMR ${parseFloat(b.amount).toFixed(2)}</strong></td>
+                                    <td><span class="badge ${b.payment_status === 'approved' ? 'paid' : 'pending'}">${b.payment_status}</span></td>
+                                </tr>`).join('')}
+                            </tbody>
+                        </table>
+                    </div>
+                    <div class="pagination" id="pag-balance"></div>
                 </div>
             </div>
 
@@ -479,10 +569,10 @@ app.get('/dashboard', requireAuth, async (req, res) => {
                                     <td>${v.phone}</td>
                                     <td><span style="font-weight:700; color:var(--success);">${v.entry_status}</span></td>
                                 </tr>`).join('')}
-                                ${verifiedRows.length === 0 ? '<tr><td colspan="5" style="text-align:center; padding:40px;">Gate entry has not started yet.</td></tr>' : ''}
                             </tbody>
                         </table>
                     </div>
+                    <div class="pagination" id="pag-history"></div>
                 </div>
             </div>
 
@@ -518,20 +608,62 @@ app.get('/dashboard', requireAuth, async (req, res) => {
         function showTab(id, el) {
             document.querySelectorAll('.section').forEach(s => s.classList.remove('active'));
             document.querySelectorAll('.nav-item').forEach(n => n.classList.remove('active'));
-            document.getElementById(id).classList.add('active');
+            const target = document.getElementById(id);
+            if (target) target.classList.add('active');
             if(el) el.classList.add('active');
             if(id !== 'scanner') stopScanner();
             if(window.innerWidth < 900) toggleMenu();
         }
-
+ 
+        // --- Pagination Logic ---
+        const ITEMS_PER_PAGE = 25;
+        const state = {
+            pending: 1,
+            approved: 1,
+            balance: 1,
+            history: 1
+        };
+ 
+        function renderPagination(id) {
+            const table = document.querySelector('#' + id + ' table');
+            if(!table) return;
+            const rows = Array.from(table.tBodies[0].rows);
+            const totalPages = Math.ceil(rows.length / ITEMS_PER_PAGE);
+            const container = document.getElementById('pag-' + id);
+            
+            if (!container) return;
+            if (rows.length === 0) {
+                container.innerHTML = '';
+                return;
+            }
+ 
+            const currentPage = state[id];
+            
+            // Show/Hide rows
+            rows.forEach((row, idx) => {
+                row.style.display = (idx >= (currentPage - 1) * ITEMS_PER_PAGE && idx < currentPage * ITEMS_PER_PAGE) ? '' : 'none';
+            });
+ 
+            container.innerHTML = `
+            < button class="page-btn" onclick = "setPage('${id}', ${currentPage - 1})" ${ currentPage === 1 ? 'disabled' : '' }> Prev</button >
+                <div class="page-info">Page ${currentPage} of ${totalPages || 1}</div>
+                <button class="page-btn" onclick="setPage('${id}', ${currentPage + 1})" ${currentPage === totalPages ? 'disabled' : ''}>Next</button>
+        `;
+        }
+ 
+        function setPage(id, page) {
+            state[id] = page;
+            renderPagination(id);
+        }
+ 
         function toggleMenu() {
             document.getElementById('sidebar').classList.toggle('open');
         }
 
         async function approveBooking(bookingNo) {
             if(!confirm('Authorize payment for ' + bookingNo + '?')) return;
-            const btn = document.getElementById('btn-' + bookingNo);
-            btn.disabled = true; btn.innerText = 'Syncing...';
+            const btn = document.getElementById('btn-' + bookingNo) || (event ? event.target : null);
+            if(btn) { btn.disabled = true; btn.innerText = 'Syncing...'; }
             try {
                 const response = await fetch('/admin/approve', {
                     method: 'POST',
@@ -657,6 +789,8 @@ app.get('/dashboard', requireAuth, async (req, res) => {
 
         // Auto-tab if coming from QR link
         window.addEventListener('load', () => {
+            ['pending', 'approved', 'balance', 'history'].forEach(id => renderPagination(id));
+            
             const params = new URLSearchParams(window.location.search);
             if(params.has('id')) {
                 showTab('scanner');
