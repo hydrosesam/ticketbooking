@@ -21,7 +21,7 @@ const PORT = process.env.PORT || 3000;
 // ======================================
 
 function requireAuth(req, res, next) {
-    if (true) { // Temporary bypass for local testing
+    if (req.cookies.auth === 'true') {
         next();
     } else {
         res.redirect(`/login-phone?next=${encodeURIComponent(req.path)}`);
@@ -222,6 +222,19 @@ app.get('/dashboard', requireAuth, async (req, res) => {
         const approvedRows = await db.query("SELECT * FROM mn_bookings WHERE payment_status = 'approved' ORDER BY timestamp DESC");
         const verifiedRows = await db.query("SELECT * FROM mn_bookings WHERE entry_status IS NOT NULL ORDER BY entry_status DESC");
         const adminRows = await db.query("SELECT * FROM mn_admins ORDER BY created_at DESC");
+
+        const formatOmanTime = (date) => {
+            if (!date) return '-';
+            return new Date(date).toLocaleString('en-GB', {
+                timeZone: 'Asia/Muscat',
+                day: '2-digit',
+                month: 'short',
+                year: 'numeric',
+                hour: '2-digit',
+                minute: '2-digit',
+                hour12: true
+            });
+        };
 
         let totalRevenue = 0;
         let collected = 0;
@@ -429,12 +442,13 @@ app.get('/dashboard', requireAuth, async (req, res) => {
                     <div class="table-wrap">
                         <table>
                             <thead>
-                                <tr><th>Booking</th><th>Phone</th><th>Category</th><th>Qty</th><th>Verification</th><th>Action</th></tr>
+                                <tr><th>Booking</th><th>Date/Time (Oman)</th><th>Phone</th><th>Category</th><th>Qty</th><th>Verification</th><th>Action</th></tr>
                             </thead>
                             <tbody>
                                 ${pendingRows.slice(0, 10).map(b => `
                                 <tr>
                                     <td><strong>${b.booking_no}</strong></td>
+                                    <td style="font-size:12px; color:#64748b;">${formatOmanTime(b.timestamp)}</td>
                                     <td><a href="https://wa.me/${b.phone}" target="_blank" style="color:var(--primary); font-weight:600;">${b.phone}</a></td>
                                     <td><span class="badge unused">${b.category}</span></td>
                                     <td>${b.quantity}</td>
@@ -460,12 +474,13 @@ app.get('/dashboard', requireAuth, async (req, res) => {
                     <div class="table-wrap">
                         <table>
                             <thead>
-                                <tr><th>Booking</th><th>Phone</th><th>Category</th><th>Qty</th><th>Verification</th><th>Action</th></tr>
+                                <tr><th>Booking</th><th>Date/Time (Oman)</th><th>Phone</th><th>Category</th><th>Qty</th><th>Verification</th><th>Action</th></tr>
                             </thead>
                             <tbody>
                                 ${pendingRows.map(b => `
                                 <tr id="row-${b.booking_no}">
                                     <td><strong>${b.booking_no}</strong></td>
+                                    <td style="font-size:12px; color:#64748b;">${formatOmanTime(b.timestamp)}</td>
                                     <td><a href="https://wa.me/${b.phone}" target="_blank" style="color:var(--primary); font-weight:600;">${b.phone}</a></td>
                                     <td><span class="badge unused">${b.category}</span></td>
                                     <td>${b.quantity}</td>
@@ -491,12 +506,13 @@ app.get('/dashboard', requireAuth, async (req, res) => {
                     <div class="table-wrap">
                         <table>
                             <thead>
-                                <tr><th>Booking</th><th>Phone</th><th>Cat</th><th>Qty</th><th>Status</th><th>Entry</th></tr>
+                                <tr><th>Booking</th><th>Date/Time</th><th>Phone</th><th>Cat</th><th>Qty</th><th>Status</th><th>Entry</th></tr>
                             </thead>
                             <tbody>
                                 ${approvedRows.map(b => `
                                 <tr>
                                     <td><strong>${b.booking_no}</strong></td>
+                                    <td style="font-size:12px; color:#64748b;">${formatOmanTime(b.timestamp)}</td>
                                     <td>${b.phone}</td>
                                     <td>${b.category}</td>
                                     <td>${b.quantity}</td>
@@ -540,12 +556,13 @@ app.get('/dashboard', requireAuth, async (req, res) => {
                     <div class="table-wrap">
                         <table>
                             <thead>
-                                <tr><th>Booking</th><th>Customer Info</th><th>Category</th><th>Amount</th><th>Status</th></tr>
+                                <tr><th>Booking</th><th>Time (Oman)</th><th>Customer Info</th><th>Category</th><th>Amount</th><th>Status</th></tr>
                             </thead>
                             <tbody>
                                 ${bookingRows.map(b => `
                                 <tr>
                                     <td><strong>${b.booking_no}</strong></td>
+                                    <td style="font-size:12px; color:#64748b;">${formatOmanTime(b.timestamp)}</td>
                                     <td>${b.phone}</td>
                                     <td>${b.category}</td>
                                     <td><strong>OMR ${parseFloat(b.amount).toFixed(2)}</strong></td>
@@ -582,12 +599,13 @@ app.get('/dashboard', requireAuth, async (req, res) => {
                     <div class="table-wrap">
                         <table>
                             <thead>
-                                <tr><th>Booking</th><th>Category</th><th>Qty</th><th>Phone</th><th>Entry Time</th></tr>
+                                <tr><th>Booking</th><th>Booking Time</th><th>Category</th><th>Qty</th><th>Phone</th><th>Entry Time</th></tr>
                             </thead>
                             <tbody>
                                 ${verifiedRows.map(v => `
                                 <tr>
                                     <td><strong>${v.booking_no}</strong></td>
+                                    <td style="font-size:12px; color:#64748b;">${formatOmanTime(v.timestamp)}</td>
                                     <td>${v.category}</td>
                                     <td>${v.quantity}</td>
                                     <td>${v.phone}</td>
