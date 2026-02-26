@@ -1,0 +1,15 @@
+services:
+  - type: web
+    name: ticket-booking-system
+    env: node
+    plan: free
+    buildCommand: npm install
+    startCommand: node server.js
+    envVars:
+      - key: NODE_VERSION
+        value: 20
+      - key: PUPPETEER_SKIP_CHROMIUM_DOWNLOAD
+        value: "false"
+    # Puppeteer requires specific system libraries on Render
+    # We use a buildpack or native packages if available
+    # For Render Free, the best way is usually a Dockerfile or their native puppeteer support
