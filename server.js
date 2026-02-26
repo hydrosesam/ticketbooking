@@ -644,11 +644,10 @@ app.get('/dashboard', requireAuth, async (req, res) => {
                 row.style.display = (idx >= (currentPage - 1) * ITEMS_PER_PAGE && idx < currentPage * ITEMS_PER_PAGE) ? '' : 'none';
             });
  
-            container.innerHTML = `
-            < button class="page-btn" onclick = "setPage('${id}', ${currentPage - 1})" ${ currentPage === 1 ? 'disabled' : '' }> Prev</button >
-                <div class="page-info">Page ${currentPage} of ${totalPages || 1}</div>
-                <button class="page-btn" onclick="setPage('${id}', ${currentPage + 1})" ${currentPage === totalPages ? 'disabled' : ''}>Next</button>
-        `;
+            container.innerHTML = 
+                '<button class="page-btn" onclick="setPage(\'' + id + '\', ' + (currentPage - 1) + ')" ' + (currentPage === 1 ? 'disabled' : '') + '>Prev</button>' +
+                '<div class="page-info">Page ' + currentPage + ' of ' + (totalPages || 1) + '</div>' +
+                '<button class="page-btn" onclick="setPage(\'' + id + '\', ' + (currentPage + 1) + ')" ' + (currentPage === totalPages ? 'disabled' : '') + '>Next</button>';
         }
  
         function setPage(id, page) {
