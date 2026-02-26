@@ -225,7 +225,10 @@ app.get('/dashboard', requireAuth, async (req, res) => {
 
         const formatOmanTime = (date) => {
             if (!date) return '-';
-            return new Date(date).toLocaleString('en-GB', {
+            // If it's a string from MySQL (e.g. "2026-02-26 02:00:00"), 
+            // append ' UTC' to force JS to treat it as UTC.
+            const d = typeof date === 'string' && !date.includes('Z') && !date.includes('+') ? new Date(date + ' UTC') : new Date(date);
+            return d.toLocaleString('en-GB', {
                 timeZone: 'Asia/Muscat',
                 day: '2-digit',
                 month: 'short',
