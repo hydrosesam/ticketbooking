@@ -606,134 +606,138 @@ app.get('/dashboard', requireAuth, async (req, res) => {
 
     <script>
         function showTab(id, el) {
-            document.querySelectorAll('.section').forEach(s => s.classList.remove('active'));
-            document.querySelectorAll('.nav-item').forEach(n => n.classList.remove('active'));
-            const target = document.getElementById(id);
+            document.querySelectorAll('.section').forEach(function(s) { s.classList.remove('active'); });
+            document.querySelectorAll('.nav-item').forEach(function(n) { n.classList.remove('active'); });
+            var target = document.getElementById(id);
             if (target) target.classList.add('active');
-            if(el) el.classList.add('active');
-            if(id !== 'scanner') stopScanner();
-            if(window.innerWidth < 900) toggleMenu();
+            if (el) el.classList.add('active');
+            if (id !== 'scanner') stopScanner();
+            if (window.innerWidth < 900) toggleMenu();
         }
- 
+
         // --- Pagination Logic ---
-        const ITEMS_PER_PAGE = 25;
-        const state = {
+        var ITEMS_PER_PAGE = 25;
+        var state = {
             pending: 1,
             approved: 1,
             balance: 1,
             history: 1
         };
- 
+
         function renderPagination(id) {
-            const table = document.querySelector('#' + id + ' table');
-            if(!table) return;
-            const rows = Array.from(table.tBodies[0].rows);
-            const totalPages = Math.ceil(rows.length / ITEMS_PER_PAGE);
-            const container = document.getElementById('pag-' + id);
+            var table = document.querySelector('#' + id + ' table');
+            if (!table) return;
+            var rows = Array.from(table.tBodies[0].rows);
+            var totalPages = Math.ceil(rows.length / ITEMS_PER_PAGE);
+            var container = document.getElementById('pag-' + id);
             
             if (!container) return;
             if (rows.length === 0) {
                 container.innerHTML = '';
                 return;
             }
- 
-            const currentPage = state[id];
+
+            var currentPage = state[id];
             
             // Show/Hide rows
-            rows.forEach((row, idx) => {
+            rows.forEach(function(row, idx) {
                 row.style.display = (idx >= (currentPage - 1) * ITEMS_PER_PAGE && idx < currentPage * ITEMS_PER_PAGE) ? '' : 'none';
             });
- 
+
             container.innerHTML = 
                 '<button class="page-btn" onclick="setPage(\'' + id + '\', ' + (currentPage - 1) + ')" ' + (currentPage === 1 ? 'disabled' : '') + '>Prev</button>' +
                 '<div class="page-info">Page ' + currentPage + ' of ' + (totalPages || 1) + '</div>' +
                 '<button class="page-btn" onclick="setPage(\'' + id + '\', ' + (currentPage + 1) + ')" ' + (currentPage === totalPages ? 'disabled' : '') + '>Next</button>';
         }
- 
+
         function setPage(id, page) {
             state[id] = page;
             renderPagination(id);
         }
- 
+
         function toggleMenu() {
-            document.getElementById('sidebar').classList.toggle('open');
+            var sidebar = document.getElementById('sidebar');
+            if (sidebar) sidebar.classList.toggle('open');
         }
 
         async function approveBooking(bookingNo) {
-            if(!confirm('Authorize payment for ' + bookingNo + '?')) return;
-            const btn = document.getElementById('btn-' + bookingNo) || (event ? event.target : null);
-            if(btn) { btn.disabled = true; btn.innerText = 'Syncing...'; }
+            if (!confirm('Authorize payment for ' + bookingNo + '?')) return;
+            var btn = document.getElementById('btn-' + bookingNo);
+            if (btn) { btn.disabled = true; btn.innerText = 'Syncing...'; }
             try {
-                const response = await fetch('/admin/approve', {
+                var response = await fetch('/admin/approve', {
                     method: 'POST',
                     headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify({ bookingNo })
+                    body: JSON.stringify({ bookingNo: bookingNo })
                 });
-                const data = await response.json();
-                if (data.success) { location.reload(); } else { alert('Error: ' + data.error); btn.disabled = false; btn.innerText = 'Approve'; }
-            } catch (e) { alert('Network Error'); btn.disabled = false; }
+                var data = await response.json();
+                if (data.success) { location.reload(); } else { alert('Error: ' + data.error); if(btn) { btn.disabled = false; btn.innerText = 'Approve'; } }
+            } catch (e) { alert('Network Error'); if(btn) { btn.disabled = false; btn.innerText = 'Approve'; } }
         }
- 
+
         function toggleInvEdit(cat) {
-            document.getElementById('edit-' + cat).classList.toggle('active');
+            var el = document.getElementById('edit-' + cat);
+            if (el) el.classList.toggle('active');
         }
- 
+
         async function saveInventory(category) {
-            const total = document.getElementById('input-' + category).value;
+            var total = document.getElementById('input-' + category).value;
             try {
-                const res = await fetch('/admin/inventory/update', {
+                var res = await fetch('/admin/inventory/update', {
                     method: 'POST',
                     headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify({ category, total_seats: total })
+                    body: JSON.stringify({ category: category, total_seats: total })
                 });
                 if (res.ok) { location.reload(); } else { alert('Update Failed'); }
             } catch (e) { alert('Network Error'); }
         }
 
         // --- Scanner Logic ---
-        let html5QrCode = null;
-        let activeTicketId = null;
+        var html5QrCode = null;
+        var activeTicketId = null;
 
         function startScanner() {
             document.getElementById('scanner-container').style.display = 'block';
             document.getElementById('scanner-error').style.display = 'none';
             if (!html5QrCode) html5QrCode = new Html5Qrcode("reader");
             
-            const config = { fps: 10, qrbox: { width: 250, height: 250 } };
-            html5QrCode.start({ facingMode: "environment" }, config, async (text) => {
-                let tId = text;
-                try { const url = new URL(text); tId = url.searchParams.get("id") || text; } catch(e){}
+            var config = { fps: 10, qrbox: { width: 250, height: 250 } };
+            html5QrCode.start({ facingMode: "environment" }, config, async function(text) {
+                var tId = text;
+                try { var url = new URL(text); tId = url.searchParams.get("id") || text; } catch(e){}
                 stopScanner();
                 processTicket(tId);
-            }).catch(err => {
+            }).catch(function(err) {
                 document.getElementById('scanner-error').style.display = 'block';
                 document.getElementById('scanner-error').innerText = err;
             });
         }
 
         function stopScanner() {
-            if (html5QrCode) html5QrCode.stop().catch(() => {});
+            if (html5QrCode) html5QrCode.stop().catch(function() {});
             document.getElementById('scanner-container').style.display = 'none';
         }
 
         async function processTicket(tId) {
             activeTicketId = tId;
-            const overlay = document.getElementById('res-overlay');
-            const h = document.getElementById('res-header');
-            overlay.style.display = 'flex';
-            h.innerHTML = '<h2>Checking Database...</h2>';
-            h.style.background = '#64748b';
+            var overlay = document.getElementById('res-overlay');
+            var h = document.getElementById('res-header');
+            if (overlay) overlay.style.display = 'flex';
+            if (h) {
+                h.innerHTML = '<h2>Checking Database...</h2>';
+                h.style.background = '#64748b';
+            }
 
             try {
-                const res = await fetch('/verify/scan', {
+                var res = await fetch('/verify/scan', {
                     method: 'POST',
                     headers: { 'Content-Type': 'application/json' },
                     body: JSON.stringify({ ticketId: tId })
                 });
-                const data = await res.json();
+                var data = await res.json();
                 
                 if (!res.ok) {
-                    h.innerHTML = '<h2>INVALID TICKET</h2>'; h.style.background = 'var(--danger)';
+                    if (h) { h.innerHTML = '<h2>INVALID TICKET</h2>'; h.style.background = 'var(--danger)'; }
                     document.getElementById('res-details').style.display = 'none';
                     document.getElementById('res-error').style.display = 'block';
                     document.getElementById('res-err-txt').innerText = data.error || 'Ticket not found';
@@ -750,23 +754,23 @@ app.get('/dashboard', requireAuth, async (req, res) => {
                 document.getElementById('res-qty').innerText = data.ticket.quantity;
 
                 if (data.status === 'already_scanned') {
-                    h.innerHTML = '<h2>ALREADY USED</h2>'; h.style.background = 'var(--warning)';
+                    if (h) { h.innerHTML = '<h2>ALREADY USED</h2>'; h.style.background = 'var(--warning)'; }
                     document.getElementById('res-actions').style.display = 'none';
                     document.getElementById('btn-err-close').style.display = 'block';
                     document.getElementById('res-error').style.display = 'block';
                     document.getElementById('res-err-txt').innerHTML = 'Already Checked In at:<br><strong>' + data.ticket.entry_status + '</strong>';
                 } else {
-                    h.innerHTML = '<h2>VALID TICKET</h2>'; h.style.background = 'var(--success)';
+                    if (h) { h.innerHTML = '<h2>VALID TICKET</h2>'; h.style.background = 'var(--success)'; }
                     document.getElementById('res-actions').style.display = 'block';
                 }
             } catch(e) { alert('Verif Error'); closeOverlay(); }
         }
 
         async function confirmEntrance() {
-            const btn = document.getElementById('btn-grant');
-            btn.disabled = true; btn.innerText = 'Granting...';
+            var btn = document.getElementById('btn-grant');
+            if (btn) { btn.disabled = true; btn.innerText = 'Granting...'; }
             try {
-                const res = await fetch('/verify/confirm', {
+                var res = await fetch('/verify/confirm', {
                     method: 'POST',
                     headers: { 'Content-Type': 'application/json' },
                     body: JSON.stringify({ ticketId: activeTicketId })
@@ -774,8 +778,8 @@ app.get('/dashboard', requireAuth, async (req, res) => {
                 if (res.ok) {
                     document.getElementById('res-header').innerHTML = '<h2>ENTRY GRANTED</h2>';
                     document.getElementById('res-actions').innerHTML = '<button class="btn-action btn-approve" style="width:100%; background:#222;" onclick="location.reload()">NEXT CUSTOMER</button>';
-                } else { alert('Confirmation Failed'); btn.disabled = false; }
-            } catch(e) { alert('Network Error'); btn.disabled = false; }
+                } else { alert('Confirmation Failed'); if(btn) btn.disabled = false; }
+            } catch(e) { alert('Network Error'); if(btn) btn.disabled = false; }
         }
 
         function closeOverlay() {
@@ -787,11 +791,11 @@ app.get('/dashboard', requireAuth, async (req, res) => {
         }
 
         // Auto-tab if coming from QR link
-        window.addEventListener('load', () => {
-            ['pending', 'approved', 'balance', 'history'].forEach(id => renderPagination(id));
+        window.addEventListener('load', function() {
+            ['pending', 'approved', 'balance', 'history'].forEach(function(id) { renderPagination(id); });
             
-            const params = new URLSearchParams(window.location.search);
-            if(params.has('id')) {
+            var params = new URLSearchParams(window.location.search);
+            if (params.has('id')) {
                 showTab('scanner');
                 processTicket(params.get('id'));
             }
