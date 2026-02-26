@@ -393,6 +393,10 @@ app.get('/dashboard', requireAuth, async (req, res) => {
             h1 { font-size: 24px !important; }
             .pagination { flex-wrap: wrap; }
             .page-btn { padding: 6px 12px; font-size: 13px; }
+            .result-box { width: 90%; max-width: 350px; border-radius: 20px; }
+            #res-header { padding: 20px !important; }
+            #res-header h2 { font-size: 20px; }
+            #res-content { padding: 20px !important; }
         }
     </style>
 </head>
