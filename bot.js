@@ -337,7 +337,16 @@ async function handleMusicNightFlow(phone, event) {
         if (!isAdmin) return;
 
         const bookingNo = message.substring(message.indexOf("B-")); // Safer extraction
+
+        // Check current status
+        const booking = await db.query("SELECT payment_status FROM mn_bookings WHERE booking_no = ?", [bookingNo]);
+        const currentStatus = booking.length > 0 ? booking[0].payment_status : null;
+
         if (message.startsWith("ADM_APP_")) {
+            if (currentStatus === 'approved') {
+                await sendText(phone, `ℹ️ *Already Processed:* Booking ${bookingNo} is already approved.`);
+                return;
+            }
             const res = await authorizeAndSendTicket(bookingNo);
             if (res.success) {
                 await sendText(phone, `✅ *Approved:* Booking ${bookingNo} processed and ticket sent.`);
@@ -345,6 +354,10 @@ async function handleMusicNightFlow(phone, event) {
                 await sendText(phone, `❌ *Error:* ${res.error}`);
             }
         } else {
+            if (currentStatus === 'approved') {
+                await sendText(phone, `⚠️ *Action Blocked:* Booking ${bookingNo} is already approved and cannot be denied.`);
+                return;
+            }
             await db.query("UPDATE mn_bookings SET payment_status = 'denied' WHERE booking_no = ?", [bookingNo]);
             await sendText(phone, `🚫 *Denied:* Booking ${bookingNo} marked as invalid.`);
         }
