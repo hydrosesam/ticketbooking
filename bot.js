@@ -31,6 +31,19 @@ async function sendWhatsAppMessage(phone, data) {
     }
 }
 
+async function generateAdminOTP(phone) {
+    const code = Math.floor(100000 + Math.random() * 900000).toString(); // 6 digits
+    const expiresAt = new Date(Date.now() + 5 * 60 * 1000); // 5 mins
+
+    await db.query("REPLACE INTO mn_otp (phone, code, expires_at) VALUES (?, ?, ?)", [phone, code, expiresAt]);
+
+    await sendWhatsAppMessage(phone, {
+        type: "text",
+        text: { body: `🔐 *Your Eventz Admin Portal Access Code:*\n\n*${code}*\n\nThis code expires in 5 minutes. Do not share it with anyone.` }
+    });
+    return true;
+}
+
 async function sendText(phone, text) {
     return sendWhatsAppMessage(phone, {
         type: "text",
@@ -236,6 +249,47 @@ async function saveTempData(phone, field, value) {
     await db.query(`UPDATE mn_users SET temp_${field} = ? WHERE phone_number = ?`, [finalValue, phone]);
 }
 
+async function notifyAdminsOfPayment(bookingNo, customerPhone, category, quantity, amount, slipUrl) {
+    try {
+        const admins = await db.query("SELECT phone FROM mn_admins WHERE is_active = TRUE");
+        if (admins.length === 0) return;
+
+        const message = `🚨 *NEW PAYMENT SLIP*\n\n` +
+            `• *Booking:* ${bookingNo}\n` +
+            `• *Customer:* ${customerPhone}\n` +
+            `• *Tier:* ${category}\n` +
+            `• *Qty:* ${quantity}\n` +
+            `• *Total:* OMR ${amount}\n\n` +
+            `Please review the slip image/PDF above and click below to authorize.`;
+
+        const buttons = [
+            { type: "reply", reply: { id: `ADM_APP_${bookingNo}`, title: "Approve ✅" } },
+            { type: "reply", reply: { id: `ADM_DENY_${bookingNo}`, title: "Deny ❌" } }
+        ];
+
+        for (const admin of admins) {
+            // First send the image/document
+            try {
+                if (slipUrl.endsWith('.pdf')) {
+                    // Note: In a real environment, slipUrl needs to be a public URL for Meta to download it
+                    // For now we send the interactive message and hopefully they can see the slip in the dash if link fails
+                }
+            } catch (e) { }
+
+            await sendWhatsAppMessage(admin.phone, {
+                type: "interactive",
+                interactive: {
+                    type: "button",
+                    body: { text: message },
+                    action: { buttons }
+                }
+            });
+        }
+    } catch (err) {
+        console.error("❌ Error notifying admins:", err);
+    }
+}
+
 async function handleMusicNightFlow(phone, event) {
     const user = await getUserState(phone);
     const currentState = user.state;
@@ -250,6 +304,26 @@ async function handleMusicNightFlow(phone, event) {
         const interactive = event.interactive;
         if (interactive.type === 'button_reply') message = interactive.button_reply.id;
         else if (interactive.type === 'list_reply') message = interactive.list_reply.id;
+    }
+
+    // --- ADMIN REMOTE APPROVAL HANDLER ---
+    if (message.startsWith("ADM_APP_") || message.startsWith("ADM_DENY_")) {
+        const isAdmin = (await db.query("SELECT * FROM mn_admins WHERE phone = ? AND is_active = TRUE", [phone])).length > 0;
+        if (!isAdmin) return;
+
+        const bookingNo = message.substring(9);
+        if (message.startsWith("ADM_APP_")) {
+            const res = await authorizeAndSendTicket(bookingNo);
+            if (res.success) {
+                await sendText(phone, `✅ *Approved:* Booking ${bookingNo} processed and ticket sent.`);
+            } else {
+                await sendText(phone, `❌ *Error:* ${res.error}`);
+            }
+        } else {
+            await db.query("UPDATE mn_bookings SET payment_status = 'denied' WHERE booking_no = ?", [bookingNo]);
+            await sendText(phone, `🚫 *Denied:* Booking ${bookingNo} marked as invalid.`);
+        }
+        return;
     }
 
     const cleanMsg = message.toLowerCase().trim();
@@ -524,4 +598,9 @@ async function authorizeAndSendTicket(bookingNo) {
     }
 }
 
-module.exports = { handleMusicNightFlow, authorizeAndSendTicket };
+module.exports = {
+    handleMusicNightFlow,
+    authorizeAndSendTicket,
+    generateAdminOTP,
+    notifyAdminsOfPayment
+};

@@ -65,6 +65,27 @@ async function initDatabase() {
         `);
         console.log('✅ Checked/Created table: mn_inventory');
 
+        // 4. Create mn_admins table
+        await connection.query(`
+            CREATE TABLE IF NOT EXISTS mn_admins (
+                phone VARCHAR(20) PRIMARY KEY,
+                name VARCHAR(50) DEFAULT 'Admin',
+                is_active BOOLEAN DEFAULT TRUE,
+                created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+            )
+        `);
+        console.log('✅ Checked/Created table: mn_admins');
+
+        // 5. Create mn_otp table
+        await connection.query(`
+            CREATE TABLE IF NOT EXISTS mn_otp (
+                phone VARCHAR(20) PRIMARY KEY,
+                code VARCHAR(6) NOT NULL,
+                expires_at TIMESTAMP NOT NULL
+            )
+        `);
+        console.log('✅ Checked/Created table: mn_otp');
+
         // Seed initial capacities (INSERT IGNORE preserves existing data)
         await connection.query(`
             INSERT IGNORE INTO mn_inventory (category, total_seats, booked_seats) VALUES
@@ -74,6 +95,12 @@ async function initDatabase() {
             ('SILVER', 300, 0)
         `);
         console.log('✅ Synchronized inventory starting counts.');
+
+        // Seed initial admin
+        await connection.query(`
+            INSERT IGNORE INTO mn_admins (phone, name) VALUES ('918943807383', 'Primary Admin')
+        `);
+        console.log('✅ Seeded admin: 918943807383');
 
         // Simple Migrations for existing tables
         try {

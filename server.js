@@ -1,7 +1,7 @@
 const express = require('express');
 const cookieParser = require('cookie-parser');
 const path = require('path');
-const { handleMusicNightFlow, authorizeAndSendTicket } = require('./bot');
+const { handleMusicNightFlow, authorizeAndSendTicket, generateAdminOTP } = require('./bot');
 const db = require('./database');
 require('dotenv').config();
 
@@ -24,69 +24,114 @@ function requireAuth(req, res, next) {
     if (req.cookies.auth === 'true') {
         next();
     } else {
-        res.redirect(`/login?next=${encodeURIComponent(req.path)}`);
+        res.redirect(`/login-phone?next=${encodeURIComponent(req.path)}`);
     }
 }
 
-app.get('/login', (req, res) => {
-    const nextPath = req.query.next || '/dashboard';
-    const error = req.query.error ? '<p style="color:#e74c3c; font-size:14px; font-weight:600;">Incorrect PIN. Please try again.</p>' : '';
-
+app.get('/login-phone', (req, res) => {
+    const error = req.query.error ? '<p style="color:#e74c3c; font-size:14px; font-weight:600;">Unauthorized phone number.</p>' : '';
     res.send(`
         <!DOCTYPE html>
         <html lang="en">
         <head>
-            <meta charset="utf-8">
-            <meta name="viewport" content="width=device-width, initial-scale=1">
-            <title>Eventz Cloud - Login</title>
+            <meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1">
+            <title>Admin Login - Step 1</title>
             <link href="https://fonts.googleapis.com/css2?family=Outfit:wght@400;600;800&display=swap" rel="stylesheet">
             <style>
-                body { font-family: 'Outfit', sans-serif; background: linear-gradient(135deg, #1a237e 0%, #311b92 100%); display: flex; justify-content: center; align-items: center; min-height: 100vh; margin: 0; color: #333; }
-                .login-box { background: white; padding: 40px 30px; border-radius: 20px; box-shadow: 0 20px 50px rgba(0,0,0,0.3); width: 90%; max-width: 380px; text-align: center; }
-                h2 { color: #1a237e; margin-top: 0; font-size: 28px; font-weight: 800; }
-                p { color: #666; margin-bottom: 25px; }
-                .input-group { margin-bottom: 20px; }
-                input[type="password"] { width: 100%; padding: 15px; border: 2px solid #e0e0e0; border-radius: 12px; font-size: 24px; text-align: center; letter-spacing: 12px; box-sizing: border-box; transition: 0.3s; }
-                input[type="password"]:focus { border-color: #1a237e; outline: none; }
-                button { width: 100%; padding: 16px; background: #1a237e; color: white; border: none; border-radius: 12px; font-size: 16px; font-weight: 700; cursor: pointer; transition: 0.3s; text-transform: uppercase; letter-spacing: 1px; }
-                button:hover { background: #311b92; transform: translateY(-2px); box-shadow: 0 10px 20px rgba(26, 35, 126, 0.2); }
-                .brand { margin-top: 30px; font-size: 12px; color: #9da0a2; text-transform: uppercase; letter-spacing: 2px; }
+                body { font-family: 'Outfit', sans-serif; background: linear-gradient(135deg, #1a237e 0%, #311b92 100%); display:flex; justify-content:center; align-items:center; min-height:100vh; margin:0; }
+                .box { background:white; padding:40px; border-radius:30px; width:90%; max-width:400px; text-align:center; box-shadow:0 20px 50px rgba(0,0,0,0.3); }
+                input { width:100%; padding:15px; border:2px solid #eee; border-radius:15px; font-size:18px; text-align:center; margin-bottom:20px; box-sizing:border-box; }
+                button { width:100%; padding:15px; background:#1a237e; color:white; border:none; border-radius:15px; font-weight:700; cursor:pointer; }
             </style>
         </head>
         <body>
-            <div class="login-box">
-                <h2>Security Portal</h2>
-                <p>Please enter your access PIN.</p>
+            <div class="box">
+                <h2 style="color:#1a237e;">Admin Portal</h2>
+                <p style="color:#666;">Enter your registered WhatsApp number to receive an access code.</p>
                 ${error}
-                <form method="POST" action="/login">
-                    <input type="hidden" name="next" value="${nextPath}">
-                    <div class="input-group">
-                        <input type="password" name="pin" placeholder="••••" maxlength="6" required autofocus>
-                    </div>
-                    <button type="submit">Authenticate</button>
+                <form action="/login-phone" method="POST">
+                    <input type="text" name="phone" placeholder="968XXXXXXXX" required autofocus>
+                    <button type="submit">SEND OTP CODE</button>
                 </form>
-                <div class="brand">Eventz Cloud Infrastructure</div>
             </div>
         </body>
         </html>
     `);
 });
 
-app.post('/login', (req, res) => {
-    const { pin, next } = req.body;
-    if (pin === '1234') {
-        const nextUrl = next || '/dashboard';
-        res.cookie('auth', 'true', { maxAge: 8 * 60 * 60 * 1000, httpOnly: true }); // 8 hours
-        res.redirect(nextUrl);
+app.post('/login-phone', async (req, res) => {
+    const { phone } = req.body;
+    const admin = await db.query("SELECT * FROM mn_admins WHERE phone = ? AND is_active = TRUE", [phone]);
+    if (admin.length > 0) {
+        await generateAdminOTP(phone);
+        res.redirect(`/login-otp?phone=${phone}`);
     } else {
-        const nextUrl = next ? encodeURIComponent(next) : '%2Fdashboard';
-        res.redirect(`/login?error=true&next=${nextUrl}`);
+        res.redirect('/login-phone?error=true');
+    }
+});
+
+app.get('/login-otp', (req, res) => {
+    const phone = req.query.phone;
+    const error = req.query.error ? '<p style="color:#e74c3c; font-size:14px; font-weight:600;">Invalid or expired code.</p>' : '';
+    res.send(`
+        <!DOCTYPE html>
+        <html lang="en">
+        <head>
+            <meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1">
+            <title>Admin Login - Step 2</title>
+            <link href="https://fonts.googleapis.com/css2?family=Outfit:wght@400;600;800&display=swap" rel="stylesheet">
+            <style>
+                body { font-family: 'Outfit', sans-serif; background: linear-gradient(135deg, #1a237e 0%, #311b92 100%); display:flex; justify-content:center; align-items:center; min-height:100vh; margin:0; }
+                .box { background:white; padding:40px; border-radius:30px; width:90%; max-width:400px; text-align:center; box-shadow:0 20px 50px rgba(0,0,0,0.3); }
+                input { width:100%; padding:15px; border:2px solid #eee; border-radius:15px; font-size:24px; text-align:center; letter-spacing:8px; margin-bottom:20px; box-sizing:border-box; }
+                button { width:100%; padding:15px; background:#00c853; color:white; border:none; border-radius:15px; font-weight:700; cursor:pointer; }
+            </style>
+        </head>
+        <body>
+            <div class="box">
+                <h2 style="color:#1a237e;">Verify Identity</h2>
+                <p style="color:#666;">Enter the 6-digit code sent to<br><strong>${phone}</strong> via WhatsApp.</p>
+                ${error}
+                <form action="/login-otp" method="POST">
+                    <input type="hidden" name="phone" value="${phone}">
+                    <input type="text" name="code" placeholder="000000" maxlength="6" required autofocus>
+                    <button type="submit">VERIFY & ENTER</button>
+                </form>
+            </div>
+        </body>
+        </html>
+    `);
+});
+
+app.post('/login-otp', async (req, res) => {
+    const { phone, code } = req.body;
+    const rows = await db.query("SELECT * FROM mn_otp WHERE phone = ? AND code = ? AND expires_at > NOW()", [phone, code]);
+
+    if (rows.length > 0) {
+        await db.query("DELETE FROM mn_otp WHERE phone = ?", [phone]);
+        res.cookie('auth', 'true', { maxAge: 8 * 60 * 60 * 1000, httpOnly: true });
+        res.redirect('/dashboard');
+    } else {
+        res.redirect(`/login-otp?phone=${phone}&error=true`);
     }
 });
 
 app.get('/logout', (req, res) => {
     res.clearCookie('auth');
-    res.redirect('/login');
+    res.redirect('/login-phone');
+});
+
+// Admin API: Update Inventory
+app.post('/admin/inventory/update', requireAuth, async (req, res) => {
+    const { category, total_seats } = req.body;
+    if (!category || total_seats === undefined) return res.status(400).json({ error: "Missing data" });
+
+    try {
+        await db.query("UPDATE mn_inventory SET total_seats = ? WHERE category = ?", [total_seats, category]);
+        res.json({ success: true });
+    } catch (err) {
+        res.status(500).json({ error: err.message });
+    }
 });
 
 // Admin Approval Endpoint
@@ -151,6 +196,8 @@ app.get('/dashboard', requireAuth, async (req, res) => {
     try {
         const inventoryRows = await db.query("SELECT * FROM mn_inventory");
         const bookingRows = await db.query("SELECT * FROM mn_bookings ORDER BY timestamp DESC");
+        const pendingRows = await db.query("SELECT * FROM mn_bookings WHERE payment_status = 'pending' ORDER BY timestamp DESC");
+        const approvedRows = await db.query("SELECT * FROM mn_bookings WHERE payment_status = 'approved' ORDER BY timestamp DESC");
         const verifiedRows = await db.query("SELECT * FROM mn_bookings WHERE entry_status IS NOT NULL ORDER BY entry_status DESC");
 
         let totalRevenue = 0;
@@ -208,6 +255,11 @@ app.get('/dashboard', requireAuth, async (req, res) => {
         }
         .nav-item:hover, .nav-item.active { background: rgba(255,255,255,0.1); color: white; }
         .nav-item.active { border-right: 4px solid var(--success); }
+ 
+        .inventory-edit { display: none; margin-top: 10px; gap: 10px; }
+        .inventory-edit.active { display: flex; }
+        .edit-input { width: 60px; padding: 5px; border: 1px solid #ddd; border-radius: 8px; font-weight: bold; text-align: center; }
+        .btn-mini { padding: 5px 10px; font-size: 11px; border-radius: 6px; }
 
         .logout-area { padding: 30px; border-top: 1px solid rgba(255,255,255,0.1); }
         .btn-logout { width: 100%; padding: 12px; background: rgba(255,255,255,0.1); border: none; border-radius: 12px; color: white; cursor: pointer; font-weight: 700; transition: 0.3s; }
@@ -287,7 +339,8 @@ app.get('/dashboard', requireAuth, async (req, res) => {
             </div>
             <div class="nav">
                 <div class="nav-item active" onclick="showTab('overview', this)">📊 Overview</div>
-                <div class="nav-item" onclick="showTab('approvals', this)">🛒 Approvals</div>
+                <div class="nav-item" onclick="showTab('pending', this)">🕒 Pending</div>
+                <div class="nav-item" onclick="showTab('approved', this)">✅ Approved</div>
                 <div class="nav-item" onclick="showTab('scanner', this)">📷 Scan Ticket</div>
                 <div class="nav-item" onclick="showTab('history', this)">🏁 Verified List</div>
             </div>
@@ -319,26 +372,35 @@ app.get('/dashboard', requireAuth, async (req, res) => {
             let cls = ''; if (perc > 70) cls = 'warn'; if (perc > 90) cls = 'crit';
             return `
                         <div class="stat-card">
-                            <h3>${row.category} Inventory</h3>
-                            <span class="val">${booked} / ${total}</span>
+                            <div style="display:flex; justify-content:space-between; align-items:flex-start;">
+                                <h3>${row.category} Inventory</h3>
+                                <button class="btn-mini btn-view" onclick="toggleInvEdit('${row.category}')">Edit</button>
+                            </div>
+                            <span class="val" id="val-${row.category}">${booked} / ${total}</span>
                             <div class="prog-container"><div class="prog-bar ${cls}" style="width: ${perc}%"></div></div>
+                            <div class="inventory-edit" id="edit-${row.category}">
+                                <input type="number" class="edit-input" id="input-${row.category}" value="${total}">
+                                <button class="btn-mini btn-approve" onclick="saveInventory('${row.category}')">Save</button>
+                            </div>
                         </div>
                         `;
         }).join('')}
                 </div>
 
+            <!-- PENDING SECTION -->
+            <div id="pending" class="section">
                 <div class="card-table">
-                    <div class="table-header"><h2>Pending Approvals</h2></div>
+                    <div class="table-header"><h2>Not Approved Tickets</h2></div>
                     <div class="table-wrap">
                         <table>
                             <thead>
                                 <tr><th>Booking</th><th>Phone</th><th>Category</th><th>Qty</th><th>Verification</th><th>Action</th></tr>
                             </thead>
                             <tbody>
-                                ${bookingRows.filter(b => b.payment_status === 'pending').map(b => `
+                                ${pendingRows.map(b => `
                                 <tr id="row-${b.booking_no}">
                                     <td><strong>${b.booking_no}</strong></td>
-                                    <td>${b.phone}</td>
+                                    <td><a href="https://wa.me/${b.phone}" target="_blank" style="color:var(--primary); font-weight:600;">${b.phone}</a></td>
                                     <td><span class="badge unused">${b.category}</span></td>
                                     <td>${b.quantity}</td>
                                     <td><span class="badge pending">AWAITING</span></td>
@@ -349,32 +411,33 @@ app.get('/dashboard', requireAuth, async (req, res) => {
                                         </div>
                                     </td>
                                 </tr>`).join('')}
-                                ${bookingRows.filter(b => b.payment_status === 'pending').length === 0 ? '<tr><td colspan="6" style="text-align:center; padding:40px; color:#94a3b8;">No pending approvals at the moment. Good job!</td></tr>' : ''}
+                                ${pendingRows.length === 0 ? '<tr><td colspan="6" style="text-align:center; padding:40px; color:#94a3b8;">No unapproved tickets.</td></tr>' : ''}
                             </tbody>
                         </table>
                     </div>
                 </div>
             </div>
-
-            <!-- APPROVALS SECTION -->
-            <div id="approvals" class="section">
+ 
+            <!-- APPROVED SECTION -->
+            <div id="approved" class="section">
                <div class="card-table">
-                    <div class="table-header"><h2>Full Booking History</h2></div>
+                    <div class="table-header"><h2>Approved Tickets History</h2></div>
                     <div class="table-wrap">
                         <table>
                             <thead>
                                 <tr><th>Booking</th><th>Phone</th><th>Cat</th><th>Qty</th><th>Status</th><th>Entry</th></tr>
                             </thead>
                             <tbody>
-                                ${bookingRows.map(b => `
+                                ${approvedRows.map(b => `
                                 <tr>
                                     <td><strong>${b.booking_no}</strong></td>
                                     <td>${b.phone}</td>
                                     <td>${b.category}</td>
                                     <td>${b.quantity}</td>
-                                    <td><span class="badge ${b.payment_status === 'approved' ? 'paid' : 'pending'}">${b.payment_status}</span></td>
+                                    <td><span class="badge paid">APPROVED</span></td>
                                     <td><span class="badge ${b.entry_status ? 'scanned' : 'unused'}">${b.entry_status ? 'IN' : 'OUT'}</span></td>
                                 </tr>`).join('')}
+                                ${approvedRows.length === 0 ? '<tr><td colspan="6" style="text-align:center; padding:40px;">No tickets approved yet.</td></tr>' : ''}
                             </tbody>
                         </table>
                     </div>
@@ -478,6 +541,22 @@ app.get('/dashboard', requireAuth, async (req, res) => {
                 const data = await response.json();
                 if (data.success) { location.reload(); } else { alert('Error: ' + data.error); btn.disabled = false; btn.innerText = 'Approve'; }
             } catch (e) { alert('Network Error'); btn.disabled = false; }
+        }
+ 
+        function toggleInvEdit(cat) {
+            document.getElementById('edit-' + cat).classList.toggle('active');
+        }
+ 
+        async function saveInventory(category) {
+            const total = document.getElementById('input-' + category).value;
+            try {
+                const res = await fetch('/admin/inventory/update', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ category, total_seats: total })
+                });
+                if (res.ok) { location.reload(); } else { alert('Update Failed'); }
+            } catch (e) { alert('Network Error'); }
         }
 
         // --- Scanner Logic ---
