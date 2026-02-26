@@ -260,22 +260,47 @@ async function notifyAdminsOfPayment(bookingNo, customerPhone, category, quantit
             `• *Tier:* ${category}\n` +
             `• *Qty:* ${quantity}\n` +
             `• *Total:* OMR ${amount}\n\n` +
-            `Please review the slip image/PDF above and click below to authorize.`;
+            `Please review the slip image/PDF sent above and click below to authorize.`;
 
         const buttons = [
-            { type: "reply", reply: { id: `ADM_APP_${bookingNo}`, title: "Approve ✅" } },
+            { type: "reply", reply: { id: `ADM_APP_${bookingNo}`, title: "Verify Payment ✅" } },
             { type: "reply", reply: { id: `ADM_DENY_${bookingNo}`, title: "Deny ❌" } }
         ];
 
-        for (const admin of admins) {
-            // First send the image/document
-            try {
-                if (slipUrl.endsWith('.pdf')) {
-                    // Note: In a real environment, slipUrl needs to be a public URL for Meta to download it
-                    // For now we send the interactive message and hopefully they can see the slip in the dash if link fails
-                }
-            } catch (e) { }
+        // 1. Upload the slip to Meta to get a mediaId for the admins
+        let mediaId = null;
+        try {
+            const fileName = slipUrl.split('/').pop();
+            const filePath = path.join(__dirname, 'uploads', fileName);
+            if (fs.existsSync(filePath)) {
+                const form = new (require('form-data'))();
+                form.append('file', fs.createReadStream(filePath));
+                form.append('messaging_product', 'whatsapp');
 
+                const uploadRes = await axios.post(
+                    `https://graph.facebook.com/v17.0/${PHONE_NUMBER_ID}/media`,
+                    form,
+                    { headers: { 'Authorization': `Bearer ${WHATSAPP_ACCESS_TOKEN}`, ...form.getHeaders() } }
+                );
+                mediaId = uploadRes.data.id;
+            }
+        } catch (e) {
+            console.error("❌ Failed to upload slip for admin notification:", e.message);
+        }
+
+        for (const admin of admins) {
+            // 2. Send the image/document first
+            if (mediaId) {
+                try {
+                    const type = slipUrl.endsWith('.pdf') ? 'document' : 'image';
+                    await sendWhatsAppMessage(admin.phone, {
+                        type: type,
+                        [type]: { id: mediaId, caption: `Payment slip for ${bookingNo}` }
+                    });
+                } catch (e) { }
+            }
+
+            // 3. Send the interaction
             await sendWhatsAppMessage(admin.phone, {
                 type: "interactive",
                 interactive: {
@@ -311,7 +336,7 @@ async function handleMusicNightFlow(phone, event) {
         const isAdmin = (await db.query("SELECT * FROM mn_admins WHERE phone = ? AND is_active = TRUE", [phone])).length > 0;
         if (!isAdmin) return;
 
-        const bookingNo = message.substring(9);
+        const bookingNo = message.substring(message.indexOf("B-")); // Safer extraction
         if (message.startsWith("ADM_APP_")) {
             const res = await authorizeAndSendTicket(bookingNo);
             if (res.success) {
@@ -490,6 +515,9 @@ async function processPendingBooking(phone, user, slipUrl) {
         );
 
         await sendText(phone, "📥 *Payment Received!*\n\nOur staff will verify your payment slip shortly. Once authorized, your official PDF ticket will be sent to you automatically. Thank you!");
+
+        // --- NOTIFY ADMINS ---
+        await notifyAdminsOfPayment(bookingNo, phone, user.category, user.quantity, totalAmount, slipUrl);
 
         // Reset State AND Clear Temp Data
         await db.query(
