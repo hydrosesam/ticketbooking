@@ -283,6 +283,10 @@ app.get('/dashboard', requireAuth, async (req, res) => {
             --shadow: 0 10px 30px rgba(26, 35, 126, 0.08);
         }
 
+        *, *::before, *::after {
+            box-sizing: border-box;
+        }
+
         body {
             font-family: 'Outfit', sans-serif;
             background: var(--bg);
@@ -374,11 +378,13 @@ app.get('/dashboard', requireAuth, async (req, res) => {
         @keyframes fadeIn { from { opacity: 0; transform: translateY(10px); } to { opacity: 1; transform: translateY(0); } }
 
         /* Scanner Specific */
-        #scanner-ui { max-width: 500px; margin: 0 auto; }
-        #reader { border-radius: 20px; overflow: hidden; margin-top: 20px; }
+        #scanner-ui { max-width: 500px; margin: 0 auto; width: 100%; }
+        #reader { border-radius: 20px; overflow: hidden; margin-top: 20px; width: 100%; background: #000; }
+        #reader video { width: 100% !important; height: auto !important; object-fit: cover; }
         .scanner-card { background: #000; border-radius: 28px; padding: 20px; margin-top: 20px; }
-        .result-overlay { position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: rgba(0,0,0,0.8); z-index: 1000; display: none; align-items: center; justify-content: center; padding: 20px; }
-        .result-box { background: white; border-radius: 32px; width: 100%; max-width: 450px; overflow: hidden; }
+        .result-overlay { position: fixed; top: 0; left: 0; right: 0; bottom: 0; background: rgba(0,0,0,0.8); z-index: 1000; display: none; align-items: center; justify-content: center; padding: 20px; }
+        .result-box { background: white; border-radius: 32px; width: 100%; max-width: 450px; overflow: hidden; margin: 0 auto; display: flex; flex-direction: column; max-height: 90vh; }
+        #res-content { overflow-y: auto; -webkit-overflow-scrolling: touch; }
 
         @media (max-width: 900px) {
             .sidebar { transform: translateX(-100%); width: 280px; box-shadow: var(--shadow); }

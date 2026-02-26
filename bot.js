@@ -502,9 +502,12 @@ async function handleMusicNightFlow(phone, event) {
 
 async function processPendingBooking(phone, user, slipUrl) {
     try {
-        const timestamp = new Date().getTime();
-        const randStr = Math.random().toString(36).substring(2, 6).toUpperCase();
-        const ticketId = 'MN26-' + timestamp + '-' + randStr;
+        // Generate a strict 12-character alphanumeric Ticket ID
+        let ticketId = '';
+        const chars = 'ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789';
+        for (let i = 0; i < 12; i++) {
+            ticketId += chars.charAt(Math.floor(Math.random() * chars.length));
+        }
 
         // Use a more unique Booking No (B + Random 8 chars)
         const bookingNo = 'B-' + Math.random().toString(36).substring(2, 10).toUpperCase();
