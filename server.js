@@ -298,7 +298,7 @@ app.get('/dashboard', requireAuth, async (req, res) => {
 
         /* Sidebar & Layout */
         .layout { display: flex; min-height: 100vh; }
-        .sidebar { width: 260px; background: var(--primary); color: white; display: flex; flex-direction: column; position: fixed; height: 100vh; z-index: 100; transition: 0.3s; }
+        .sidebar { width: 260px; background: var(--primary); color: white; display: flex; flex-direction: column; position: fixed; height: 100vh; z-index: 100; transition: 0.3s; overflow-y: auto; -webkit-overflow-scrolling: touch; }
         .main-content { flex: 1; margin-left: 260px; padding: 40px; transition: 0.3s; }
 
         .logo-area { padding: 30px; text-align: center; border-bottom: 1px solid rgba(255,255,255,0.1); }
@@ -379,8 +379,8 @@ app.get('/dashboard', requireAuth, async (req, res) => {
 
         /* Scanner Specific */
         #scanner-ui { max-width: 500px; margin: 0 auto; width: 100%; }
-        #reader { border-radius: 20px; overflow: hidden; margin-top: 20px; width: 100%; background: #000; }
-        #reader video { width: 100% !important; height: auto !important; object-fit: cover; }
+        #reader { border-radius: 20px; overflow: hidden; margin-top: 20px; width: 100%; background: #000; display: flex; justify-content: center; align-items: center; min-height: 300px; }
+        #reader video { width: 100% !important; height: auto !important; object-fit: cover; border-radius: 20px; }
         .scanner-card { background: #000; border-radius: 28px; padding: 20px; margin-top: 20px; }
         .result-overlay { position: fixed; top: 0; left: 0; right: 0; bottom: 0; background: rgba(0,0,0,0.8); z-index: 1000; display: none; align-items: center; justify-content: center; padding: 20px; }
         .result-box { background: white; border-radius: 32px; width: 100%; max-width: 450px; overflow: hidden; margin: 0 auto; display: flex; flex-direction: column; max-height: 90vh; }

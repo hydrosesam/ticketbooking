@@ -3,6 +3,7 @@ const fs = require('fs');
 const path = require('path');
 const db = require('./database');
 const { generateTicketPDF, generateQRCode } = require('./pdf_generator');
+const Tesseract = require('tesseract.js');
 
 const WHATSAPP_ACCESS_TOKEN = process.env.WHATSAPP_ACCESS_TOKEN || 'EAAdPlcYFproBQLR1YAW2X176hNT7bHwfKIWhZCBlbH5b3BChXhah9gViOQLZBwycsCuSUuqN8gzJZA9vZBBCcRZBXZBdZCk8zHwuIsLnuS3k5HFnqSPeIZCZC0kSBWGTNisu6DLYWZA8LjIuAfnBkU5E9aQiQJVczG3naqaCi1siCPTj8UBENXZBNmEptcw4yupBUtFyQZDZD';
 const PHONE_NUMBER_ID = process.env.WHATSAPP_PHONE_NUMBER_ID || '658261390699917';
@@ -193,8 +194,15 @@ async function sendMNPaymentRequest(phone) {
         type: "image",
         image: {
             link: paymentQrUrl,
-            caption: "💳 *Step 1: Scan to Pay*\n\nPlease scan the QR code above to complete your payment.\n\n" +
-                "📸 *Step 2: Upload Receipt*\n\nAfter payment, *please send a photo or PDF of your payment slip here* so we can issue your ticket."
+            caption: "💳 *Step 1: Transfer Funds*\n\n" +
+                "*Bank Details:*\n" +
+                "• *Account Name:* National High Peak LLC\n" +
+                "• *Bank:* Bank Muscat\n" +
+                "• *Branch:* Al Mawaleh Branch\n" +
+                "• *Account No:* `0312045922200018`\n" +
+                "• *IBAN:* `OM610270312045922200018`\n\n" +
+                "📸 *Step 2: Upload Receipt*\n" +
+                "After payment, *please send a photo or PDF of your payment slip here* so we can verify and issue your ticket."
         }
     });
 }
@@ -322,169 +330,169 @@ async function handleMusicNightFlow(phone, event) {
     // Extract text/payload from the webhook event
     let message = "";
     if (typeof event === 'string') {
-        message = event; // Fallback for any direct calls
-    } else if (event.type === 'text') {
+        message = event;
+    } else if (event && event.type === 'text') {
         message = event.text.body;
-    } else if (event.type === 'interactive') {
+    } else if (event && event.type === 'interactive') {
         const interactive = event.interactive;
         if (interactive.type === 'button_reply') message = interactive.button_reply.id;
         else if (interactive.type === 'list_reply') message = interactive.list_reply.id;
     }
 
-    // --- ADMIN REMOTE APPROVAL HANDLER ---
+    const cleanMsg = message.toLowerCase().trim();
+    console.log(`[FLOW] Phone: ${phone} | State: ${currentState} | Msg: "${message}" | Clean: "${cleanMsg}"`);
+
+    // --- 1. GLOBAL RESET TRIGGERS (Priority) ---
+    const resetTriggers = ['menu', 'hi', 'hello', 'music night', 'restart', 'start', 'music', 'hey', 'reset'];
+    const isResetTrigger = resetTriggers.includes(cleanMsg) || (cleanMsg.length < 10 && resetTriggers.some(t => cleanMsg.includes(t)));
+
+    // DISABLED for MN_PAYMENT_UPLOAD state as per user request
+    if (currentState !== "MN_PAYMENT_UPLOAD") {
+        if (isResetTrigger || message === "BTN_MUSIC_NIGHT") {
+            console.log(`[FLOW] Global Reset Triggered by ${phone}`);
+            await db.query(`UPDATE mn_users SET temp_category = NULL, temp_quantity = NULL, temp_members = NULL, temp_slip_url = NULL WHERE phone_number = ?`, [phone]);
+            await sendMNWelcome(phone);
+            await saveUserState(phone, "MN_WELCOME_WAIT");
+            return;
+        }
+    }
+
+    // --- 2. ADMIN REMOTE APPROVAL HANDLER ---
     if (message.startsWith("ADM_APP_") || message.startsWith("ADM_DENY_")) {
         const isAdmin = (await db.query("SELECT * FROM mn_admins WHERE phone = ? AND is_active = TRUE", [phone])).length > 0;
         if (!isAdmin) return;
 
-        const bookingNo = message.substring(message.indexOf("B-")); // Safer extraction
-
-        // Check current status
+        const bookingNo = message.substring(message.indexOf("B-"));
         const booking = await db.query("SELECT payment_status FROM mn_bookings WHERE booking_no = ?", [bookingNo]);
         const currentStatus = booking.length > 0 ? booking[0].payment_status : null;
 
         if (message.startsWith("ADM_APP_")) {
-            if (currentStatus === 'approved') {
-                await sendText(phone, `ℹ️ *Already Processed:* Booking ${bookingNo} is already approved.`);
-                return;
-            }
+            if (currentStatus === 'approved') return await sendText(phone, `ℹ️ Already approved.`);
             const res = await authorizeAndSendTicket(bookingNo);
-            if (res.success) {
-                await sendText(phone, `✅ *Approved:* Booking ${bookingNo} processed and ticket sent.`);
-            } else {
-                await sendText(phone, `❌ *Error:* ${res.error}`);
-            }
+            if (res.success) await sendText(phone, `✅ Approved: ${bookingNo}`);
+            else await sendText(phone, `❌ Error: ${res.error}`);
         } else {
-            if (currentStatus === 'approved') {
-                await sendText(phone, `⚠️ *Action Blocked:* Booking ${bookingNo} is already approved and cannot be denied.`);
-                return;
-            }
+            if (currentStatus === 'approved') return await sendText(phone, `⚠️ Cannot deny approved booking.`);
             await db.query("UPDATE mn_bookings SET payment_status = 'denied' WHERE booking_no = ?", [bookingNo]);
-            await sendText(phone, `🚫 *Denied:* Booking ${bookingNo} marked as invalid.`);
+            await sendText(phone, `🚫 Denied: ${bookingNo}`);
         }
         return;
     }
 
-    const cleanMsg = message.toLowerCase().trim();
-    console.log(`[FLOW] Phone: ${phone} | State: ${currentState} | Msg: "${message}"`);
+    // --- 3. PAYMENT UPLOAD HANDLING (Special Case for Media) ---
+    if (currentState === "MN_PAYMENT_UPLOAD") {
+        let localPath = null;
+        let ocrResult = null;
 
-    // Trigger word handling
-    if (cleanMsg === 'menu' || cleanMsg === 'hi' || cleanMsg === 'music night') {
-        console.log(`[FLOW] Triggering Welcome for ${phone}`);
-        // Force reset session data for a clean start
-        await db.query(`UPDATE mn_users SET 
-            temp_category = NULL, 
-            temp_quantity = NULL, 
-            temp_members = NULL, 
-            temp_slip_url = NULL 
-            WHERE phone_number = ?`, [phone]);
+        // Check for media
+        if (event && event.type && (event.type === 'image' || event.type === 'document')) {
+            const mediaObj = event[event.type];
+            try {
+                const mediaRes = await axios.get(`https://graph.facebook.com/v17.0/${mediaObj.id}`, {
+                    headers: { 'Authorization': `Bearer ${WHATSAPP_ACCESS_TOKEN}` }
+                });
+                const fileRes = await axios.get(mediaRes.data.url, {
+                    headers: { 'Authorization': `Bearer ${WHATSAPP_ACCESS_TOKEN}` },
+                    responseType: 'arraybuffer'
+                });
 
-        await sendMNWelcome(phone);
-        await saveUserState(phone, "MN_WELCOME_WAIT");
-        return;
+                const ext = event.type === 'image' ? 'jpg' : 'pdf';
+                const fileName = `slip_${mediaObj.id}.${ext}`;
+                localPath = path.join(__dirname, 'uploads', fileName);
+                fs.writeFileSync(localPath, fileRes.data);
+
+                if (event.type === 'image') {
+                    console.log(`[OCR] Processing image ${mediaObj.id}...`);
+                    const { data: { text } } = await Tesseract.recognize(localPath, 'eng');
+                    ocrResult = extractPaymentInfo(text);
+                }
+                localPath = `/uploads/${fileName}`;
+            } catch (e) {
+                console.error("Media error:", e.message);
+            }
+        }
+
+        if (localPath) {
+            const price = getCategoryPrice(user.category);
+            const expectedAmount = price * user.quantity;
+
+            if (ocrResult) {
+                if (ocrResult.transactionId) {
+                    const dupCheck = await db.query("SELECT booking_no FROM mn_bookings WHERE bank_transaction_id = ?", [ocrResult.transactionId]);
+                    if (dupCheck.length > 0) return await sendText(phone, "❌ *Transaction ID is already processed.*");
+                } else {
+                    return await sendText(phone, "❌ *Transaction ID not found.* Please ensure the photo is clear.");
+                }
+
+                if (ocrResult.amount !== null && ocrResult.amount < expectedAmount) {
+                    return await sendText(phone, `❌ *Your amount mismatch.*\nExpected: OMR ${expectedAmount.toFixed(2)}\nFound: OMR ${ocrResult.amount.toFixed(2)}`);
+                }
+            } else if (event && event.type === 'image') {
+                return await sendText(phone, "❌ *Transaction ID not found.* We couldn't read the details from the slip.");
+            }
+
+            await saveTempData(phone, 'slip_url', localPath);
+            await processPendingBooking(phone, user, localPath, ocrResult);
+            return;
+        } else if (typeof message === 'string' && message.trim().length > 0) {
+            // Text sent instead of media - Strictly PDF or Image prompt
+            await sendText(phone, "⚠️ Please upload a *photo or PDF* of your payment slip to proceed.");
+            return;
+        }
     }
 
-    if (message === "BTN_MUSIC_NIGHT") {
-        await sendMNWelcome(phone);
-        await saveUserState(phone, "MN_WELCOME_WAIT");
-        return;
-    }
-
+    // --- 4. NAVIGATION HANDLERS ---
     if (message === "BTN_MN_BOOK_NOW") {
         await sendMNCategorySelect(phone);
         await saveUserState(phone, "MN_CATEGORY_SELECT");
         return;
     }
 
-    // --- Media Handling (Images/Documents for Payment Slips) ---
-    if (currentState === "MN_PAYMENT_UPLOAD") {
-        let localPath = null;
-        if (typeof event === 'object' && (event.image || event.document)) {
-            const mediaObj = event.image || event.document;
-            try {
-                // 1. Get Media URL from Meta API
-                const mediaRes = await axios.get(`https://graph.facebook.com/v17.0/${mediaObj.id}`, {
-                    headers: { 'Authorization': `Bearer ${WHATSAPP_ACCESS_TOKEN}` }
-                });
-                const mediaUrl = mediaRes.data.url;
-
-                // 2. Download the actual file
-                const fileRes = await axios.get(mediaUrl, {
-                    headers: { 'Authorization': `Bearer ${WHATSAPP_ACCESS_TOKEN}` },
-                    responseType: 'arraybuffer'
-                });
-
-                const ext = event.image ? 'jpg' : 'pdf';
-                const fileName = `slip_${mediaObj.id}.${ext}`;
-                localPath = path.join(__dirname, 'uploads', fileName);
-                fs.writeFileSync(localPath, fileRes.data);
-
-                // We'll store the relative path for the dashboard
-                localPath = `/uploads/${fileName}`;
-            } catch (e) {
-                console.error("Error downloading media:", e);
-            }
-        }
-
-        if (localPath) {
-            await saveTempData(phone, 'slip_url', localPath);
-            await processPendingBooking(phone, user, localPath);
-            return;
-        } else if (typeof message === 'string') {
-            await sendText(phone, "⚠️ Please upload a photo or PDF of your payment slip to proceed.");
-            return;
-        }
-    }
-
-    if (typeof message !== 'string') return; // Skip if not a button/text reply and not in payment state
+    // --- 5. STATE SWITCH ---
+    if (typeof message !== 'string' || message.trim() === "") return;
 
     switch (currentState) {
         case "MN_WELCOME_WAIT":
+            await sendText(phone, "⚠️ *Please use the button above* to proceed.");
+            await sendMNWelcome(phone);
+            break;
+
         case "MN_CATEGORY_SELECT":
             if (message.startsWith("CAT_")) {
                 const category = message.replace("CAT_", "");
-
-                // --- INVENTORY CHECK ---
                 const invRes = await db.query("SELECT * FROM mn_inventory WHERE category = ?", [category]);
                 if (invRes.length > 0) {
                     const available = invRes[0].total_seats - invRes[0].booked_seats;
                     if (available <= 0) {
-                        await sendText(phone, `🚫 Sorry, the ${category} category is completely sold out! Please select another category.`);
-                        await sendMNCategorySelect(phone);
-                        return; // Stop here, keep them in MN_CATEGORY_SELECT state
+                        await sendText(phone, `🚫 ${category} is sold out!`);
+                        return await sendMNCategorySelect(phone);
                     }
-
                     await saveTempData(phone, 'category', category);
                     await sendMNQuantityRequest(phone, category, available);
                     await saveUserState(phone, "MN_QUANTITY_INPUT");
-                } else {
-                    await sendText(phone, "⚠️ Sorry, we could not retrieve availability for that category. Please try again.");
                 }
+            } else {
+                await sendText(phone, "⚠️ *Please select a category* from the list provided.");
+                await sendMNCategorySelect(phone);
             }
             break;
 
         case "MN_QUANTITY_INPUT":
-            let qtyStr = message;
-            if (message.startsWith("QTY_")) qtyStr = message.replace("QTY_", "");
-
-            const qty = parseInt(qtyStr);
+            let qty = parseInt(message.replace("QTY_", ""));
             if (!isNaN(qty) && qty > 0) {
                 await saveTempData(phone, 'quantity', qty);
                 await sendMNMemberNameRequest(phone);
                 await saveUserState(phone, "MN_MEMBER_NAME");
             } else {
-                await sendText(phone, "⚠️ Please enter a valid number of tickets from the list.");
+                await sendText(phone, "⚠️ *Please choose a quantity* from the list.");
+                const inv = await db.query("SELECT * FROM mn_inventory WHERE category = ?", [user.category]);
+                await sendMNQuantityRequest(phone, user.category, inv[0].total_seats - inv[0].booked_seats);
             }
             break;
 
         case "MN_MEMBER_NAME":
-            const membersList = [message];
-            await saveTempData(phone, 'members', membersList);
-            const summaryData = {
-                category: user.category,
-                quantity: user.quantity,
-                members: membersList
-            };
-            await showMNBookingSummary(phone, summaryData);
+            await saveTempData(phone, 'members', [message]);
+            await showMNBookingSummary(phone, { category: user.category, quantity: user.quantity, members: [message] });
             await saveUserState(phone, "MN_CONFIRM_AWAIT");
             break;
 
@@ -495,12 +503,46 @@ async function handleMusicNightFlow(phone, event) {
             } else if (message === "CANCEL_MN_BOOKING") {
                 await sendText(phone, "❌ Booking cancelled.");
                 await saveUserState(phone, "MN_MAIN");
+            } else {
+                await sendText(phone, "⚠️ *Please use the buttons below*.");
+                await showMNBookingSummary(phone, { category: user.category, quantity: user.quantity, members: user.members });
             }
             break;
     }
 }
 
-async function processPendingBooking(phone, user, slipUrl) {
+/**
+ * Parses OCR text to extract Bank Muscat transaction details.
+ */
+function extractPaymentInfo(text) {
+    const info = { transactionId: null, amount: null, datetime: null, beneficiary: null, mobile: null };
+
+    // 1. Transaction ID (Typically starts with BMCT...)
+    const txIdMatch = text.match(/BMCT[0-9]{12}/i);
+    if (txIdMatch) info.transactionId = txIdMatch[0].toUpperCase();
+
+    // 2. Amount (Look for "Amount: OMR 27.000" or similar)
+    const amountMatch = text.match(/Amount:?\s?OMR?\s?([0-9]+\.[0-9]+)/i) || text.match(/Total Amount:?\s?OMR?\s?([0-9]+\.[0-9]+)/i);
+    if (amountMatch) info.amount = parseFloat(amountMatch[1]);
+
+    // 3. Date and Time
+    const dateMatch = text.match(/Transaction Date:?\s?([0-9/]+)/i);
+    const timeMatch = text.match(/Transaction time:?\s?([0-9:]+\s?(AM|PM)?)/i);
+    if (dateMatch && timeMatch) {
+        info.datetime = `${dateMatch[1]} ${timeMatch[1]}`.trim();
+    }
+
+    // 4. Beneficiary Details
+    const benMatch = text.match(/Beneficiary Name:?\s?([^\n]+)/i);
+    if (benMatch) info.beneficiary = benMatch[1].trim();
+
+    const mobileMatch = text.match(/Beneficiary Mobile:?\s?([^\n]+)/i);
+    if (mobileMatch) info.mobile = mobileMatch[1].trim();
+
+    return info.transactionId || info.amount ? info : null;
+}
+
+async function processPendingBooking(phone, user, slipUrl, ocrData = null) {
     try {
         // Generate a strict 12-character alphanumeric Ticket ID
         let ticketId = '';
@@ -518,9 +560,17 @@ async function processPendingBooking(phone, user, slipUrl) {
         // Save booking to MySQL database as PENDING
         console.log(`[DB] Inserting pending booking ${bookingNo} for ${phone}`);
         await db.query(
-            `INSERT INTO mn_bookings (booking_no, ticket_id, phone, category, quantity, amount, members, payment_status, payment_slip_url) 
-             VALUES (?, ?, ?, ?, ?, ?, ?, 'pending', ?)`,
-            [bookingNo, ticketId, phone, user.category, user.quantity, totalAmount, JSON.stringify(user.members), slipUrl]
+            `INSERT INTO mn_bookings (booking_no, ticket_id, phone, category, quantity, amount, members, payment_status, payment_slip_url, bank_transaction_id, bank_amount, bank_datetime, bank_beneficiary, bank_mobile) 
+             VALUES (?, ?, ?, ?, ?, ?, ?, 'pending', ?, ?, ?, ?, ?, ?)`,
+            [
+                bookingNo, ticketId, phone, user.category, user.quantity, totalAmount, JSON.stringify(user.members),
+                slipUrl,
+                (ocrData ? ocrData.transactionId : null),
+                (ocrData ? ocrData.amount : null),
+                (ocrData ? ocrData.datetime : null),
+                (ocrData ? ocrData.beneficiary : null),
+                (ocrData ? ocrData.mobile : null)
+            ]
         );
 
         // Deduct from inventory (Pre-reserve)

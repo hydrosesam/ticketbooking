@@ -49,6 +49,11 @@ async function initDatabase() {
                 status VARCHAR(20) DEFAULT 'Confirmed',
                 payment_status VARCHAR(20) DEFAULT 'pending',
                 payment_slip_url TEXT DEFAULT NULL,
+                bank_transaction_id VARCHAR(50) UNIQUE DEFAULT NULL,
+                bank_amount DECIMAL(10,2) DEFAULT NULL,
+                bank_datetime VARCHAR(50) DEFAULT NULL,
+                bank_beneficiary VARCHAR(100) DEFAULT NULL,
+                bank_mobile VARCHAR(20) DEFAULT NULL,
                 entry_status VARCHAR(100) DEFAULT NULL,
                 timestamp TIMESTAMP DEFAULT CURRENT_TIMESTAMP
             )
@@ -116,9 +121,12 @@ async function initDatabase() {
         } catch (e) { }
 
         try {
-            await connection.query("ALTER TABLE mn_bookings ADD COLUMN payment_status VARCHAR(20) DEFAULT 'pending'");
-            await connection.query("ALTER TABLE mn_bookings ADD COLUMN payment_slip_url TEXT DEFAULT NULL");
-            console.log('✅ Migration: Added payment columns to mn_bookings');
+            await connection.query("ALTER TABLE mn_bookings ADD COLUMN bank_transaction_id VARCHAR(50) UNIQUE DEFAULT NULL");
+            await connection.query("ALTER TABLE mn_bookings ADD COLUMN bank_amount DECIMAL(10,2) DEFAULT NULL");
+            await connection.query("ALTER TABLE mn_bookings ADD COLUMN bank_datetime VARCHAR(50) DEFAULT NULL");
+            await connection.query("ALTER TABLE mn_bookings ADD COLUMN bank_beneficiary VARCHAR(100) DEFAULT NULL");
+            await connection.query("ALTER TABLE mn_bookings ADD COLUMN bank_mobile VARCHAR(20) DEFAULT NULL");
+            console.log('✅ Migration: Added extended bank transaction columns to mn_bookings');
         } catch (e) { }
 
         connection.release();
