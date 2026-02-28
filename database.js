@@ -120,14 +120,22 @@ async function initDatabase() {
             console.log('✅ Migration: Added temp_slip_url to mn_users');
         } catch (e) { }
 
-        try {
-            await connection.query("ALTER TABLE mn_bookings ADD COLUMN bank_transaction_id VARCHAR(50) UNIQUE DEFAULT NULL");
-            await connection.query("ALTER TABLE mn_bookings ADD COLUMN bank_amount DECIMAL(10,2) DEFAULT NULL");
-            await connection.query("ALTER TABLE mn_bookings ADD COLUMN bank_datetime VARCHAR(50) DEFAULT NULL");
-            await connection.query("ALTER TABLE mn_bookings ADD COLUMN bank_beneficiary VARCHAR(100) DEFAULT NULL");
-            await connection.query("ALTER TABLE mn_bookings ADD COLUMN bank_mobile VARCHAR(20) DEFAULT NULL");
-            console.log('✅ Migration: Added extended bank transaction columns to mn_bookings');
-        } catch (e) { }
+        const addColumn = async (table, column, type) => {
+            try {
+                await connection.query(`ALTER TABLE ${table} ADD COLUMN ${column} ${type}`);
+                console.log(`✅ Migration: Added ${column} to ${table}`);
+            } catch (e) {
+                if (e.code !== 'ER_DUP_COLUMN_NAME') {
+                    console.error(`❌ Migration error (${column}):`, e.message);
+                }
+            }
+        };
+
+        await addColumn('mn_bookings', 'bank_transaction_id', 'VARCHAR(50) UNIQUE DEFAULT NULL');
+        await addColumn('mn_bookings', 'bank_amount', 'DECIMAL(10,2) DEFAULT NULL');
+        await addColumn('mn_bookings', 'bank_datetime', 'VARCHAR(50) DEFAULT NULL');
+        await addColumn('mn_bookings', 'bank_beneficiary', 'VARCHAR(100) DEFAULT NULL');
+        await addColumn('mn_bookings', 'bank_mobile', 'VARCHAR(20) DEFAULT NULL');
 
         connection.release();
     } catch (err) {
