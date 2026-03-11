@@ -125,7 +125,9 @@ async function initDatabase() {
                 await connection.query(`ALTER TABLE ${table} ADD COLUMN ${column} ${type}`);
                 console.log(`✅ Migration: Added ${column} to ${table}`);
             } catch (e) {
-                if (e.code !== 'ER_DUP_COLUMN_NAME') {
+                // Silently skip if column already exists (expected on restart)
+                const isDupCol = e.code === 'ER_DUP_COLUMN_NAME' || (e.message && e.message.includes('Duplicate column'));
+                if (!isDupCol) {
                     console.error(`❌ Migration error (${column}):`, e.message);
                 }
             }
