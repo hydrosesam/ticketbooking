@@ -3,6 +3,7 @@ const http = require('http');
 const { Server } = require('socket.io');
 const cookieParser = require('cookie-parser');
 const path = require('path');
+const fs = require('fs');
 const { handleMusicNightFlow, authorizeAndSendTicket, generateAdminOTP, sendManualMessage } = require('./bot');
 const db = require('./database');
 require('dotenv').config();
@@ -15,8 +16,12 @@ app.use(express.json());
 app.use(express.urlencoded({ extended: true }));
 app.use(cookieParser());
 
+// Ensure uploads directory exists (important for fresh deployments)
+const UPLOADS_DIR = path.join(__dirname, 'uploads');
+if (!fs.existsSync(UPLOADS_DIR)) fs.mkdirSync(UPLOADS_DIR, { recursive: true });
+
 // Serve the uploads folder statically so dashboard can show slips
-app.use('/uploads', express.static(path.join(__dirname, 'uploads')));
+app.use('/uploads', express.static(UPLOADS_DIR));
 
 const VERIFY_TOKEN = process.env.VERIFY_TOKEN || 'ALTAZA_123';
 const PORT = process.env.PORT || 3000;
@@ -1346,126 +1351,6 @@ app.get('/dashboard', requireAuth, async (req, res) => {
             input.focus();
         }
 
-        // --- Inbox Logic ---
-        var activeChatPhone = null;
-
-        async function loadConversations() {
-            try {
-                var res = await fetch('/admin/inbox/conversations');
-                var data = await res.json();
-                var list = document.getElementById('conversations-list');
-                list.innerHTML = '';
-                
-                if (data.length === 0) {
-                    list.innerHTML = '<div style="padding:40px; text-align:center; color:#94a3b8;">No messages yet.</div>';
-                    return;
-                }
-
-                data.forEach(function(conv) {
-                    var el = document.createElement('div');
-                    el.className = 'conversation-item';
-                    el.setAttribute('data-phone', conv.phone);
-                    if (conv.phone === activeChatPhone) el.classList.add('active');
-                    
-                    var time = new Date(conv.timestamp).toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'});
-                    var preview = conv.message_type === 'text' ? conv.content : '[' + conv.message_type + ']';
-                    
-                    // Try to extract name if temp_members exists
-                    var nameDisplay = conv.phone;
-                    try {
-                        if (conv.temp_members) {
-                            var members = JSON.parse(conv.temp_members);
-                            if (members && members.length > 0) nameDisplay = members[0] + ' (' + conv.phone + ')';
-                        }
-                    } catch(e) {}
-
-                    el.innerHTML = '<span class="conversation-time">' + time + '</span>' +
-                                   '<div class="conversation-phone">' + nameDisplay + '</div>' +
-                                   '<div class="conversation-preview">' + preview + '</div>';
-                                   
-                    el.onclick = function() { openChat(conv.phone, nameDisplay); };
-                    list.appendChild(el);
-                });
-            } catch (e) {
-                console.error("Failed to load conversations:", e);
-            }
-        }
-
-        function filterConversations() {
-            var input = document.getElementById('inbox-search-input').value.toLowerCase();
-            document.querySelectorAll('.conversation-item').forEach(function(el) {
-                if (el.innerText.toLowerCase().includes(input)) el.style.display = '';
-                else el.style.display = 'none';
-            });
-        }
-
-        async function openChat(phone, nameDisplay) {
-            activeChatPhone = phone;
-            document.getElementById('chat-empty').style.display = 'none';
-            document.getElementById('chat-area').style.display = 'flex';
-            document.getElementById('chat-header-name').innerText = nameDisplay || phone;
-            document.getElementById('chat-messages').innerHTML = '<div style="text-align:center; padding:20px; color:#94a3b8;">Loading...</div>';
-            
-            // Highlight selected
-            document.querySelectorAll('.conversation-item').forEach(function(el) { el.classList.remove('active'); });
-            var activeEl = document.querySelector('.conversation-item[data-phone="'+phone+'"]');
-            if (activeEl) activeEl.classList.add('active');
-
-            try {
-                var res = await fetch('/admin/inbox/messages/' + phone);
-                var messages = await res.json();
-                
-                var chatHtml = '';
-                messages.forEach(function(msg) {
-                    var time = new Date(msg.timestamp).toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'});
-                    var typeClass = msg.direction === 'inbound' ? 'msg-inbound' : 'msg-outbound';
-                    
-                    var content = msg.content;
-                    if (msg.message_type === 'image' && msg.media_url) {
-                        content = '<a href="' + msg.media_url + '" target="_blank" style="color:inherit; text-decoration:underline;">[View Image]</a><br>' + content;
-                    } else if (msg.message_type === 'document' && msg.media_url) {
-                         content = '<a href="' + msg.media_url + '" target="_blank" style="color:inherit; text-decoration:underline;">[Download Document]</a><br>' + content;
-                    }
-
-                    chatHtml += '<div class="msg-bubble ' + typeClass + '">' +
-                                content +
-                                '<span class="msg-time">' + time + '</span>' +
-                                '</div>';
-                });
-                
-                var chatBox = document.getElementById('chat-messages');
-                chatBox.innerHTML = chatHtml;
-                chatBox.scrollTop = chatBox.scrollHeight;
-            } catch (e) {
-                console.error("Failed to load chat history", e);
-            }
-        }
-
-        async function sendChatMessage() {
-            var input = document.getElementById('chat-composer');
-            var text = input.value.trim();
-            if (!text || !activeChatPhone) return;
-            
-            input.disabled = true;
-            try {
-                var res = await fetch('/admin/inbox/send', {
-                    method: 'POST',
-                    headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify({ phone: activeChatPhone, message: text })
-                });
-                if (res.ok) {
-                    input.value = '';
-                    openChat(activeChatPhone, document.getElementById('chat-header-name').innerText);
-                    loadConversations();
-                } else {
-                    alert('Failed to send message');
-                }
-            } catch (e) {
-                alert('Network Error');
-            }
-            input.disabled = false;
-            input.focus();
-        }
 
         async function addAdmin() {
             var phone = document.getElementById('new-admin-phone').value;

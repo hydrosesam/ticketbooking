@@ -154,6 +154,9 @@ async function initDatabase() {
         console.log('✅ Checked/Created table: mn_messages');
         // Migration: add is_read if it doesn't already exist
         await addColumn('mn_messages', 'is_read', 'TINYINT(1) DEFAULT 0');
+        // Fix any NULL is_read values from before this migration ran
+        await connection.query("UPDATE mn_messages SET is_read = 1 WHERE is_read IS NULL AND direction = 'outbound'");
+        await connection.query("UPDATE mn_messages SET is_read = 0 WHERE is_read IS NULL AND direction = 'inbound'");
 
         connection.release();
     } catch (err) {
