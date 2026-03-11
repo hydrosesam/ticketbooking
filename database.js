@@ -147,10 +147,13 @@ async function initDatabase() {
                 content TEXT,
                 media_url TEXT DEFAULT NULL,
                 status VARCHAR(20) DEFAULT 'sent',
+                is_read TINYINT(1) DEFAULT 0,
                 timestamp TIMESTAMP DEFAULT CURRENT_TIMESTAMP
             )
         `);
         console.log('✅ Checked/Created table: mn_messages');
+        // Migration: add is_read if it doesn't already exist
+        await addColumn('mn_messages', 'is_read', 'TINYINT(1) DEFAULT 0');
 
         connection.release();
     } catch (err) {

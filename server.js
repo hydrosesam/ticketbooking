@@ -1,4 +1,6 @@
 const express = require('express');
+const http = require('http');
+const { Server } = require('socket.io');
 const cookieParser = require('cookie-parser');
 const path = require('path');
 const { handleMusicNightFlow, authorizeAndSendTicket, generateAdminOTP, sendManualMessage } = require('./bot');
@@ -6,6 +8,9 @@ const db = require('./database');
 require('dotenv').config();
 
 const app = express();
+const httpServer = http.createServer(app);
+const io = new Server(httpServer, { cors: { origin: '*' } });
+
 app.use(express.json());
 app.use(express.urlencoded({ extended: true }));
 app.use(cookieParser());
@@ -185,7 +190,9 @@ app.post('/admin/delete', requireAuth, async (req, res) => {
 app.get('/admin/inbox/conversations', requireAuth, async (req, res) => {
     try {
         const rows = await db.query(`
-            SELECT m1.*, u.temp_members 
+            SELECT m1.*, u.temp_members,
+                   (SELECT COUNT(*) FROM mn_messages m3
+                    WHERE m3.phone = m1.phone AND m3.direction = 'inbound' AND m3.is_read = 0) AS unread_count
             FROM mn_messages m1
             LEFT JOIN mn_messages m2
                 ON m1.phone = m2.phone AND m1.timestamp < m2.timestamp
@@ -220,13 +227,33 @@ app.post('/admin/inbox/send', requireAuth, async (req, res) => {
     if (!phone || !message) return res.status(400).json({ error: "Missing parameters" });
 
     try {
-        // sendManualMessage inside bot.js will automatically log it to DB
         const result = await sendManualMessage(phone, message);
         if (result.success) {
+            // Emit socket event for the sent message too
+            io.emit('new_message', {
+                phone: phone,
+                direction: 'outbound',
+                message_type: 'text',
+                content: message,
+                is_read: 1,
+                timestamp: new Date().toISOString()
+            });
             res.json({ success: true });
         } else {
             res.status(500).json({ error: result.error });
         }
+    } catch (err) {
+        res.status(500).json({ error: err.message });
+    }
+});
+
+// Mark all messages from a phone as read
+app.post('/admin/inbox/mark-read', requireAuth, async (req, res) => {
+    const { phone } = req.body;
+    if (!phone) return res.status(400).json({ error: 'Missing phone' });
+    try {
+        await db.query("UPDATE mn_messages SET is_read = 1 WHERE phone = ? AND is_read = 0", [phone]);
+        res.json({ success: true });
     } catch (err) {
         res.status(500).json({ error: err.message });
     }
@@ -284,13 +311,26 @@ app.post('/webhook', async (req, res) => {
                 }
 
                 // Log inbound message to the database
+                let savedMsgId = null;
                 try {
-                    await db.query(
-                        "INSERT INTO mn_messages (phone, direction, message_type, content, media_url, status) VALUES (?, 'inbound', ?, ?, ?, 'received')",
+                    const result = await db.query(
+                        "INSERT INTO mn_messages (phone, direction, message_type, content, media_url, status, is_read) VALUES (?, 'inbound', ?, ?, ?, 'received', 0)",
                         [senderPhone, type, content, mediaUrl]
                     );
+                    savedMsgId = result.insertId;
+                    // Emit real-time event to all connected dashboard clients
+                    io.emit('new_message', {
+                        id: savedMsgId,
+                        phone: senderPhone,
+                        direction: 'inbound',
+                        message_type: type,
+                        content: content,
+                        media_url: mediaUrl,
+                        is_read: 0,
+                        timestamp: new Date().toISOString()
+                    });
                 } catch (dbErr) {
-                    console.error("❌ Failed to log inbound message:", dbErr.message);
+                    console.error("\u274c Failed to log inbound message:", dbErr.message);
                 }
 
                 // Pass the full webhook event object to the bot flow
@@ -364,6 +404,7 @@ app.get('/dashboard', requireAuth, async (req, res) => {
     <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=0">
     <title>Eventz Cloud - Admin Premium</title>
     <link href="https://fonts.googleapis.com/css2?family=Outfit:wght@300;400;600;800&display=swap" rel="stylesheet">
+    <script src="/socket.io/socket.io.js"></script>
     <script src="https://unpkg.com/html5-qrcode" type="text/javascript"></script>
     <style>
         :root {
@@ -477,11 +518,12 @@ app.get('/dashboard', requireAuth, async (req, res) => {
         .inbox-search { padding: 20px; border-bottom: 1px solid #f1f5f9; }
         .inbox-search input { width: 100%; padding: 12px; border: 1px solid #e2e8f0; border-radius: 12px; font-family: 'Outfit'; }
         .conversations { flex: 1; overflow-y: auto; }
-        .conversation-item { padding: 20px; border-bottom: 1px solid #f8fafc; cursor: pointer; transition: 0.2s; }
+        .conversation-item { padding: 16px 20px; border-bottom: 1px solid #f8fafc; cursor: pointer; transition: 0.2s; position: relative; }
         .conversation-item:hover, .conversation-item.active { background: #f8faff; border-left: 4px solid var(--primary); }
         .conversation-phone { font-weight: 800; color: var(--primary); margin-bottom: 5px; }
-        .conversation-preview { font-size: 13px; color: #64748b; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+        .conversation-preview { font-size: 13px; color: #64748b; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; max-width: 200px; }
         .conversation-time { font-size: 11px; color: #94a3b8; float: right; }
+        .unread-badge { background: var(--danger); color: white; font-size: 11px; font-weight: 800; border-radius: 50px; padding: 2px 7px; min-width: 20px; text-align: center; display: inline-block; margin-left: 8px; vertical-align: middle; }
         
         .chat-area { flex: 1; display: flex; flex-direction: column; background: #fbfcfe; }
         .chat-header { padding: 20px 30px; background: white; border-bottom: 1px solid #f1f5f9; display: flex; align-items: center; justify-content: space-between; }
@@ -1144,11 +1186,46 @@ app.get('/dashboard', requireAuth, async (req, res) => {
         // --- Inbox Logic ---
         var activeChatPhone = null;
 
+        // Connect to Socket.IO server for real-time updates
+        var socket = io();
+        socket.on('new_message', function(msg) {
+            // Always refresh the conversation sidebar list
+            loadConversations();
+
+            // If this message is for the currently open chat, append it immediately
+            if (activeChatPhone && msg.phone === activeChatPhone) {
+                var typeClass = msg.direction === 'inbound' ? 'msg-inbound' : 'msg-outbound';
+                var time = new Date(msg.timestamp).toLocaleTimeString([], {hour:'2-digit', minute:'2-digit'});
+                var bubble = document.createElement('div');
+                bubble.className = 'msg-bubble ' + typeClass;
+                bubble.innerHTML = (msg.content || '') + '<span class="msg-time">' + time + '</span>';
+                var chatBox = document.getElementById('chat-messages');
+                if (chatBox) {
+                    chatBox.appendChild(bubble);
+                    chatBox.scrollTop = chatBox.scrollHeight;
+                    // Auto mark-read since user is viewing this conversation
+                    if (msg.direction === 'inbound') markRead(activeChatPhone);
+                }
+            }
+        });
+
+        async function markRead(phone) {
+            try {
+                await fetch('/admin/inbox/mark-read', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ phone: phone })
+                });
+            } catch(e) {}
+        }
+
         async function loadConversations() {
             try {
                 var res = await fetch('/admin/inbox/conversations');
                 var data = await res.json();
                 var list = document.getElementById('conversations-list');
+
+                if (!list) return;
                 list.innerHTML = '';
                 
                 if (data.length === 0) {
@@ -1164,6 +1241,7 @@ app.get('/dashboard', requireAuth, async (req, res) => {
                     
                     var time = new Date(conv.timestamp).toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'});
                     var preview = conv.message_type === 'text' ? conv.content : '[' + conv.message_type + ']';
+                    var unread = parseInt(conv.unread_count || 0);
                     
                     // Try to extract name if temp_members exists
                     var nameDisplay = conv.phone;
@@ -1174,8 +1252,9 @@ app.get('/dashboard', requireAuth, async (req, res) => {
                         }
                     } catch(e) {}
 
+                    var badgeHtml = unread > 0 ? '<span class="unread-badge">' + unread + '</span>' : '';
                     el.innerHTML = '<span class="conversation-time">' + time + '</span>' +
-                                   '<div class="conversation-phone">' + nameDisplay + '</div>' +
+                                   '<div class="conversation-phone">' + nameDisplay + badgeHtml + '</div>' +
                                    '<div class="conversation-preview">' + preview + '</div>';
                                    
                     el.onclick = function() { openChat(conv.phone, nameDisplay); };
@@ -1205,6 +1284,11 @@ app.get('/dashboard', requireAuth, async (req, res) => {
             document.querySelectorAll('.conversation-item').forEach(function(el) { el.classList.remove('active'); });
             var activeEl = document.querySelector('.conversation-item[data-phone="'+phone+'"]');
             if (activeEl) activeEl.classList.add('active');
+
+            // Mark all inbound messages as read
+            markRead(phone);
+            // Refresh sidebar to clear the unread badge
+            loadConversations();
 
             try {
                 var res = await fetch('/admin/inbox/messages/' + phone);
@@ -1482,9 +1566,19 @@ app.post('/verify/confirm', async (req, res) => {
 });
 
 // ======================================
+// Socket.IO connection handler
+// ======================================
+io.on('connection', (socket) => {
+    console.log('📡 Dashboard connected via Socket.IO:', socket.id);
+    socket.on('disconnect', () => {
+        console.log('📡 Dashboard disconnected:', socket.id);
+    });
+});
+
+// ======================================
 // Start Server
 // ======================================
-app.listen(PORT, '0.0.0.0', () => {
+httpServer.listen(PORT, '0.0.0.0', () => {
     console.log(`🚀 Node.js Server listening on port ${PORT} `);
     console.log(`🔗 Webhook endpoint: http://localhost:${PORT}/webhook`);
 });

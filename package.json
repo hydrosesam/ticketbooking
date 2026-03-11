@@ -20,6 +20,7 @@
     "mysql2": "^3.18.0",
     "puppeteer": "^24.37.5",
     "qrcode": "^1.5.4",
+    "socket.io": "^4.8.3",
     "tesseract.js": "^5.1.1"
   }
 }
