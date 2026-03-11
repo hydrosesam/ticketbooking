@@ -638,6 +638,42 @@ app.get('/dashboard', requireAuth, async (req, res) => {
                 </div>
             </div>
 
+            <!-- INBOX SECTION -->
+            <div id="inbox" class="section">
+                <div style="margin-bottom: 30px;">
+                    <h1 style="margin:0; font-size:28px; font-weight:800;">Messages</h1>
+                    <p style="color:#64748b;">WhatsApp Business API Inbox</p>
+                </div>
+                <div class="inbox-container">
+                    <div class="inbox-list">
+                        <div class="inbox-search">
+                            <input type="text" placeholder="Search conversations..." id="inbox-search-input" onkeyup="filterConversations()">
+                        </div>
+                        <div class="conversations" id="conversations-list">
+                            <!-- Populated by JS -->
+                            <div style="padding:40px; text-align:center; color:#94a3b8;">Loading...</div>
+                        </div>
+                    </div>
+                    <div class="chat-area" id="chat-area" style="display:none;">
+                        <div class="chat-header">
+                            <h3 id="chat-header-name">Select a conversation</h3>
+                            <button class="btn-mini btn-view" onclick="loadConversations()">Refresh</button>
+                        </div>
+                        <div class="chat-messages" id="chat-messages">
+                            <!-- Populated by JS -->
+                        </div>
+                        <div class="chat-input-area">
+                            <input type="text" id="chat-composer" placeholder="Type a message..." onkeypress="if(event.keyCode===13) sendChatMessage()">
+                            <button class="btn-action btn-approve" onclick="sendChatMessage()">SEND</button>
+                        </div>
+                    </div>
+                    <div class="chat-area" id="chat-empty" style="align-items:center; justify-content:center; color:#94a3b8;">
+                        <svg width="64" height="64" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" style="margin-bottom:20px; opacity:0.5;"><path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"></path></svg>
+                        Select a conversation to start messaging
+                    </div>
+                </div>
+            </div>
+
             <!-- PENDING SECTION -->
             <div id="pending" class="section">
                 <div class="card-table">
