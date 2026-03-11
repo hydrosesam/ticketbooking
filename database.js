@@ -137,6 +137,21 @@ async function initDatabase() {
         await addColumn('mn_bookings', 'bank_beneficiary', 'VARCHAR(100) DEFAULT NULL');
         await addColumn('mn_bookings', 'bank_mobile', 'VARCHAR(20) DEFAULT NULL');
 
+        // 6. Create mn_messages table for chat inbox
+        await connection.query(`
+            CREATE TABLE IF NOT EXISTS mn_messages (
+                id INT AUTO_INCREMENT PRIMARY KEY,
+                phone VARCHAR(20) NOT NULL,
+                direction ENUM('inbound', 'outbound') NOT NULL,
+                message_type VARCHAR(20) DEFAULT 'text',
+                content TEXT,
+                media_url TEXT DEFAULT NULL,
+                status VARCHAR(20) DEFAULT 'sent',
+                timestamp TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+            )
+        `);
+        console.log('✅ Checked/Created table: mn_messages');
+
         connection.release();
     } catch (err) {
         console.error('❌ Failed to initialize database:', err.message);

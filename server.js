@@ -1,7 +1,7 @@
 const express = require('express');
 const cookieParser = require('cookie-parser');
 const path = require('path');
-const { handleMusicNightFlow, authorizeAndSendTicket, generateAdminOTP } = require('./bot');
+const { handleMusicNightFlow, authorizeAndSendTicket, generateAdminOTP, sendManualMessage } = require('./bot');
 const db = require('./database');
 require('dotenv').config();
 
@@ -178,6 +178,61 @@ app.post('/admin/delete', requireAuth, async (req, res) => {
 });
 
 // ======================================
+// Inbox API Endpoints
+// ======================================
+
+// Get all unique conversations (latest message per phone)
+app.get('/admin/inbox/conversations', requireAuth, async (req, res) => {
+    try {
+        const rows = await db.query(`
+            SELECT m1.*, u.temp_members 
+            FROM mn_messages m1
+            LEFT JOIN mn_messages m2
+                ON m1.phone = m2.phone AND m1.timestamp < m2.timestamp
+            LEFT JOIN mn_users u
+                ON m1.phone = u.phone_number
+            WHERE m2.id IS NULL
+            ORDER BY m1.timestamp DESC
+        `);
+        res.json(rows);
+    } catch (err) {
+        console.error("Inbox converstations error:", err);
+        res.status(500).json({ error: err.message });
+    }
+});
+
+// Get message history for a specific phone number
+app.get('/admin/inbox/messages/:phone', requireAuth, async (req, res) => {
+    try {
+        const rows = await db.query(
+            "SELECT * FROM mn_messages WHERE phone = ? ORDER BY timestamp ASC",
+            [req.params.phone]
+        );
+        res.json(rows);
+    } catch (err) {
+        res.status(500).json({ error: err.message });
+    }
+});
+
+// Send a manual message from the inbox
+app.post('/admin/inbox/send', requireAuth, async (req, res) => {
+    const { phone, message } = req.body;
+    if (!phone || !message) return res.status(400).json({ error: "Missing parameters" });
+
+    try {
+        // sendManualMessage inside bot.js will automatically log it to DB
+        const result = await sendManualMessage(phone, message);
+        if (result.success) {
+            res.json({ success: true });
+        } else {
+            res.status(500).json({ error: result.error });
+        }
+    } catch (err) {
+        res.status(500).json({ error: err.message });
+    }
+});
+
+// ======================================
 // Webhook Verification (Required by Meta)
 // ======================================
 app.get('/webhook', (req, res) => {
@@ -208,9 +263,38 @@ app.post('/webhook', async (req, res) => {
             const senderPhone = webhookEvent.from;
 
             try {
+                // Determine message content for logging
+                let content = '';
+                let mediaUrl = null;
+                const type = webhookEvent.type;
+
+                if (type === 'text') {
+                    content = webhookEvent.text.body;
+                } else if (type === 'image') {
+                    mediaUrl = webhookEvent.image.id;
+                    content = webhookEvent.image.caption || 'Image Received';
+                } else if (type === 'document') {
+                    mediaUrl = webhookEvent.document.id;
+                    content = webhookEvent.document.caption || webhookEvent.document.filename || 'Document Received';
+                } else if (type === 'interactive') {
+                    if (webhookEvent.interactive.type === 'button_reply') content = webhookEvent.interactive.button_reply.title || webhookEvent.interactive.button_reply.id;
+                    else if (webhookEvent.interactive.type === 'list_reply') content = webhookEvent.interactive.list_reply.title || webhookEvent.interactive.list_reply.id;
+                } else {
+                    content = `[${type} received]`;
+                }
+
+                // Log inbound message to the database
+                try {
+                    await db.query(
+                        "INSERT INTO mn_messages (phone, direction, message_type, content, media_url, status) VALUES (?, 'inbound', ?, ?, ?, 'received')",
+                        [senderPhone, type, content, mediaUrl]
+                    );
+                } catch (dbErr) {
+                    console.error("❌ Failed to log inbound message:", dbErr.message);
+                }
+
                 // Pass the full webhook event object to the bot flow
-                //bot.js will determine how to handle text vs media
-                console.log(`📩 Webhook Event from ${senderPhone}: ${webhookEvent.type}`);
+                console.log(`📩 Webhook Event from ${senderPhone}: ${type}`);
                 await handleMusicNightFlow(senderPhone, webhookEvent);
             } catch (err) {
                 console.error('❌ Error handling webhook event:', err);
@@ -261,6 +345,16 @@ app.get('/dashboard', requireAuth, async (req, res) => {
                 else receivable += parseFloat(b.amount || 0);
             });
         }
+
+        // Create a map to detect duplicate Bank Transaction IDs
+        const txIdMap = {};
+        bookingRows.forEach(b => {
+            if (b.bank_transaction_id) {
+                const tid = b.bank_transaction_id.toUpperCase();
+                if (!txIdMap[tid]) txIdMap[tid] = [];
+                txIdMap[tid].push(b.booking_no);
+            }
+        });
 
         const html = `
 <!DOCTYPE html>
@@ -377,6 +471,30 @@ app.get('/dashboard', requireAuth, async (req, res) => {
         .section.active { display: block; }
         @keyframes fadeIn { from { opacity: 0; transform: translateY(10px); } to { opacity: 1; transform: translateY(0); } }
 
+        /* Inbox Specific */
+        .inbox-container { display: flex; height: calc(100vh - 120px); background: white; border-radius: 24px; box-shadow: var(--shadow); overflow: hidden; margin-top: 20px; }
+        .inbox-list { width: 320px; border-right: 1px solid #f1f5f9; display: flex; flex-direction: column; }
+        .inbox-search { padding: 20px; border-bottom: 1px solid #f1f5f9; }
+        .inbox-search input { width: 100%; padding: 12px; border: 1px solid #e2e8f0; border-radius: 12px; font-family: 'Outfit'; }
+        .conversations { flex: 1; overflow-y: auto; }
+        .conversation-item { padding: 20px; border-bottom: 1px solid #f8fafc; cursor: pointer; transition: 0.2s; }
+        .conversation-item:hover, .conversation-item.active { background: #f8faff; border-left: 4px solid var(--primary); }
+        .conversation-phone { font-weight: 800; color: var(--primary); margin-bottom: 5px; }
+        .conversation-preview { font-size: 13px; color: #64748b; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+        .conversation-time { font-size: 11px; color: #94a3b8; float: right; }
+        
+        .chat-area { flex: 1; display: flex; flex-direction: column; background: #fbfcfe; }
+        .chat-header { padding: 20px 30px; background: white; border-bottom: 1px solid #f1f5f9; display: flex; align-items: center; justify-content: space-between; }
+        .chat-header h3 { margin: 0; color: var(--primary); }
+        .chat-messages { flex: 1; padding: 30px; overflow-y: auto; display: flex; flex-direction: column; gap: 15px; }
+        .msg-bubble { max-width: 70%; padding: 12px 18px; border-radius: 20px; font-size: 14px; position: relative; }
+        .msg-inbound { background: white; color: #334155; align-self: flex-start; border-bottom-left-radius: 4px; box-shadow: 0 2px 10px rgba(0,0,0,0.05); }
+        .msg-outbound { background: var(--primary); color: white; align-self: flex-end; border-bottom-right-radius: 4px; box-shadow: 0 2px 10px rgba(26, 35, 126, 0.2); }
+        .msg-time { font-size: 10px; opacity: 0.7; margin-top: 5px; text-align: right; display: block; }
+        .chat-input-area { padding: 20px 30px; background: white; border-top: 1px solid #f1f5f9; display: flex; gap: 15px; }
+        .chat-input-area input { flex: 1; padding: 15px; border: 1px solid #e2e8f0; border-radius: 12px; font-family: 'Outfit'; font-size: 14px; margin-bottom: 0; }
+        .chat-input-area button { width: auto; padding: 0 30px; background: var(--success); }
+
         /* Scanner Specific */
         #scanner-ui { max-width: 500px; margin: 0 auto; width: 100%; }
         #reader { border-radius: 20px; overflow: hidden; margin-top: 20px; width: 100%; background: #000; display: flex; justify-content: center; align-items: center; min-height: 300px; }
@@ -422,6 +540,7 @@ app.get('/dashboard', requireAuth, async (req, res) => {
             <div class="nav">
                 ${isAdmin ? `
                 <div class="nav-item active" onclick="showTab('overview', this)">📊 Overview</div>
+                <div class="nav-item" onclick="showTab('inbox', this)">💬 Inbox</div>
                 <div class="nav-item" onclick="showTab('pending', this)">🕒 Pending</div>
                 <div class="nav-item" onclick="showTab('approved', this)">✅ Approved</div>
                 <div class="nav-item" onclick="showTab('balance', this)">💰 Balance</div>
@@ -482,21 +601,36 @@ app.get('/dashboard', requireAuth, async (req, res) => {
                                 <tr><th>Booking</th><th>Date/Time (Oman)</th><th>Phone</th><th>Category</th><th>Qty</th><th>Verification</th><th>Action</th></tr>
                             </thead>
                             <tbody>
-                                ${pendingRows.slice(0, 10).map(b => `
+                                ${pendingRows.slice(0, 10).map(b => {
+            const txid = b.bank_transaction_id ? b.bank_transaction_id.toUpperCase() : null;
+            const isDup = txid && txIdMap[txid] && txIdMap[txid].length > 1;
+            const dupConflicting = isDup ? txIdMap[txid].filter(no => no !== b.booking_no) : [];
+
+            return `
                                 <tr>
                                     <td><strong>${b.booking_no}</strong></td>
                                     <td style="font-size:12px; color:#64748b;">${formatOmanTime(b.timestamp)}</td>
-                                    <td><a href="https://wa.me/${b.phone}" target="_blank" style="color:var(--primary); font-weight:600;">${b.phone}</a></td>
-                                    <td><span class="badge unused">${b.category}</span></td>
-                                    <td>${b.quantity}</td>
-                                    <td><span class="badge pending">AWAITING</span></td>
+                                    <td>
+                                        <div style="font-weight:700;">${b.phone}</div>
+                                        <div style="font-size:11px; color:#64748b;">${b.category} x ${b.quantity}</div>
+                                    </td>
+                                    <td>
+                                        <div style="font-size:12px;"><strong>TXID:</strong> ${b.bank_transaction_id || '-'}</div>
+                                        <div style="font-size:12px;"><strong>Amt:</strong> OMR ${b.bank_amount || '-'}</div>
+                                    </td>
+                                    <td>
+                                        ${isDup ? `<div style="color:var(--danger); font-size:10px; font-weight:800; margin-bottom:5px;">⚠️ DUPLICATE TXN ID</div>` : ''}
+                                        ${isDup ? `<div style="font-size:9px; color:#64748b;">Conflicting: ${dupConflicting.join(', ')}</div>` : ''}
+                                        <div style="font-size:11px; color:#64748b;">${b.bank_beneficiary || '-'} (${b.bank_mobile || '-'})</div>
+                                    </td>
                                     <td>
                                         <div style="display:flex; gap:8px;">
                                             <a href="${b.payment_slip_url}" target="_blank" class="btn-view">Slip</a>
                                             <button onclick="approveBooking('${b.booking_no}')" class="btn-action btn-approve">Approve</button>
                                         </div>
                                     </td>
-                                </tr>`).join('')}
+                                </tr>`;
+        }).join('')}
                                 ${pendingRows.length === 0 ? '<tr><td colspan="7" style="text-align:center; padding:40px;">All caught up!</td></tr>' : ''}
                             </tbody>
                         </table>
@@ -514,21 +648,36 @@ app.get('/dashboard', requireAuth, async (req, res) => {
                                 <tr><th>Booking</th><th>Date/Time (Oman)</th><th>Phone</th><th>Category</th><th>Qty</th><th>Verification</th><th>Action</th></tr>
                             </thead>
                             <tbody>
-                                ${pendingRows.map(b => `
+                                ${pendingRows.map(b => {
+            const txid = b.bank_transaction_id ? b.bank_transaction_id.toUpperCase() : null;
+            const isDup = txid && txIdMap[txid] && txIdMap[txid].length > 1;
+            const dupConflicting = isDup ? txIdMap[txid].filter(no => no !== b.booking_no) : [];
+
+            return `
                                 <tr id="row-${b.booking_no}">
                                     <td><strong>${b.booking_no}</strong></td>
                                     <td style="font-size:12px; color:#64748b;">${formatOmanTime(b.timestamp)}</td>
-                                    <td><a href="https://wa.me/${b.phone}" target="_blank" style="color:var(--primary); font-weight:600;">${b.phone}</a></td>
-                                    <td><span class="badge unused">${b.category}</span></td>
-                                    <td>${b.quantity}</td>
-                                    <td><span class="badge pending">AWAITING</span></td>
+                                    <td>
+                                        <div style="font-weight:700;">${b.phone}</div>
+                                        <div style="font-size:11px; color:#64748b;">${b.category} x ${b.quantity}</div>
+                                    </td>
+                                    <td>
+                                        <div style="font-size:12px;"><strong>TXID:</strong> ${b.bank_transaction_id || '-'}</div>
+                                        <div style="font-size:12px;"><strong>Amt:</strong> OMR ${b.bank_amount || '-'}</div>
+                                    </td>
+                                    <td>
+                                        ${isDup ? `<div style="color:var(--danger); font-size:10px; font-weight:800; margin-bottom:5px;">⚠️ DUPLICATE TXN ID</div>` : ''}
+                                        ${isDup ? `<div style="font-size:9px; color:#64748b;">Conflicting: ${dupConflicting.join(', ')}</div>` : ''}
+                                        <div style="font-size:11px; color:#64748b;">${b.bank_beneficiary || '-'} (${b.bank_mobile || '-'})</div>
+                                    </td>
                                     <td>
                                         <div style="display:flex; gap:8px;">
                                             <a href="${b.payment_slip_url}" target="_blank" class="btn-view">Slip</a>
                                             <button onclick="approveBooking('${b.booking_no}')" class="btn-action btn-approve" id="btn-${b.booking_no}">Approve</button>
                                         </div>
                                     </td>
-                                </tr>`).join('')}
+                                </tr>`;
+        }).join('')}
                             </tbody>
                         </table>
                     </div>
@@ -543,16 +692,22 @@ app.get('/dashboard', requireAuth, async (req, res) => {
                     <div class="table-wrap">
                         <table>
                             <thead>
-                                <tr><th>Booking</th><th>Date/Time</th><th>Phone</th><th>Cat</th><th>Qty</th><th>Status</th><th>Entry</th></tr>
+                                <tr><th>Booking</th><th>Date/Time</th><th>Customer</th><th>Bank Info</th><th>Total</th><th>Status</th><th>Entry</th></tr>
                             </thead>
                             <tbody>
                                 ${approvedRows.map(b => `
                                 <tr>
                                     <td><strong>${b.booking_no}</strong></td>
                                     <td style="font-size:12px; color:#64748b;">${formatOmanTime(b.timestamp)}</td>
-                                    <td>${b.phone}</td>
-                                    <td>${b.category}</td>
-                                    <td>${b.quantity}</td>
+                                    <td>
+                                        <div style="font-weight:700;">${b.phone}</div>
+                                        <div style="font-size:11px; color:#64748b;">${b.category} x ${b.quantity}</div>
+                                    </td>
+                                    <td>
+                                        <div style="font-size:11px;"><strong>TXID:</strong> ${b.bank_transaction_id || '-'}</div>
+                                        <div style="font-size:11px;"><strong>Ben:</strong> ${b.bank_beneficiary || '-'}</div>
+                                    </td>
+                                    <td><strong>OMR ${parseFloat(b.amount).toFixed(2)}</strong></td>
                                     <td><span class="badge paid">APPROVED</span></td>
                                     <td><span class="badge ${b.entry_status ? 'scanned' : 'unused'}">${b.entry_status ? 'IN' : 'OUT'}</span></td>
                                 </tr>`).join('')}
@@ -593,7 +748,7 @@ app.get('/dashboard', requireAuth, async (req, res) => {
                     <div class="table-wrap">
                         <table>
                             <thead>
-                                <tr><th>Booking</th><th>Time (Oman)</th><th>Customer Info</th><th>Category</th><th>Amount</th><th>Status</th></tr>
+                                <tr><th>Booking</th><th>Date/Time</th><th>Customer Info</th><th>Bank Transaction</th><th>Total Amt</th><th>Status</th></tr>
                             </thead>
                             <tbody>
                                 ${bookingRows.map(b => `
@@ -729,6 +884,7 @@ app.get('/dashboard', requireAuth, async (req, res) => {
             if (target) target.classList.add('active');
             if (el) el.classList.add('active');
             if (id !== 'scanner') stopScanner();
+            if (id === 'inbox') loadConversations(); // Automatically load inbox data
             if (window.innerWidth < 900) toggleMenu();
         }
 
@@ -948,6 +1104,248 @@ app.get('/dashboard', requireAuth, async (req, res) => {
                 processTicket(params.get('id'));
             }
         });
+
+        // --- Inbox Logic ---
+        var activeChatPhone = null;
+
+        async function loadConversations() {
+            try {
+                var res = await fetch('/admin/inbox/conversations');
+                var data = await res.json();
+                var list = document.getElementById('conversations-list');
+                list.innerHTML = '';
+                
+                if (data.length === 0) {
+                    list.innerHTML = '<div style="padding:40px; text-align:center; color:#94a3b8;">No messages yet.</div>';
+                    return;
+                }
+
+                data.forEach(function(conv) {
+                    var el = document.createElement('div');
+                    el.className = 'conversation-item';
+                    el.setAttribute('data-phone', conv.phone);
+                    if (conv.phone === activeChatPhone) el.classList.add('active');
+                    
+                    var time = new Date(conv.timestamp).toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'});
+                    var preview = conv.message_type === 'text' ? conv.content : '[' + conv.message_type + ']';
+                    
+                    // Try to extract name if temp_members exists
+                    var nameDisplay = conv.phone;
+                    try {
+                        if (conv.temp_members) {
+                            var members = JSON.parse(conv.temp_members);
+                            if (members && members.length > 0) nameDisplay = members[0] + ' (' + conv.phone + ')';
+                        }
+                    } catch(e) {}
+
+                    el.innerHTML = '<span class="conversation-time">' + time + '</span>' +
+                                   '<div class="conversation-phone">' + nameDisplay + '</div>' +
+                                   '<div class="conversation-preview">' + preview + '</div>';
+                                   
+                    el.onclick = function() { openChat(conv.phone, nameDisplay); };
+                    list.appendChild(el);
+                });
+            } catch (e) {
+                console.error("Failed to load conversations:", e);
+            }
+        }
+
+        function filterConversations() {
+            var input = document.getElementById('inbox-search-input').value.toLowerCase();
+            document.querySelectorAll('.conversation-item').forEach(function(el) {
+                if (el.innerText.toLowerCase().includes(input)) el.style.display = '';
+                else el.style.display = 'none';
+            });
+        }
+
+        async function openChat(phone, nameDisplay) {
+            activeChatPhone = phone;
+            document.getElementById('chat-empty').style.display = 'none';
+            document.getElementById('chat-area').style.display = 'flex';
+            document.getElementById('chat-header-name').innerText = nameDisplay || phone;
+            document.getElementById('chat-messages').innerHTML = '<div style="text-align:center; padding:20px; color:#94a3b8;">Loading...</div>';
+            
+            // Highlight selected
+            document.querySelectorAll('.conversation-item').forEach(function(el) { el.classList.remove('active'); });
+            var activeEl = document.querySelector('.conversation-item[data-phone="'+phone+'"]');
+            if (activeEl) activeEl.classList.add('active');
+
+            try {
+                var res = await fetch('/admin/inbox/messages/' + phone);
+                var messages = await res.json();
+                
+                var chatHtml = '';
+                messages.forEach(function(msg) {
+                    var time = new Date(msg.timestamp).toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'});
+                    var typeClass = msg.direction === 'inbound' ? 'msg-inbound' : 'msg-outbound';
+                    
+                    var content = msg.content;
+                    if (msg.message_type === 'image' && msg.media_url) {
+                        content = '<a href="' + msg.media_url + '" target="_blank" style="color:inherit; text-decoration:underline;">[View Image]</a><br>' + content;
+                    } else if (msg.message_type === 'document' && msg.media_url) {
+                         content = '<a href="' + msg.media_url + '" target="_blank" style="color:inherit; text-decoration:underline;">[Download Document]</a><br>' + content;
+                    }
+
+                    chatHtml += '<div class="msg-bubble ' + typeClass + '">' +
+                                content +
+                                '<span class="msg-time">' + time + '</span>' +
+                                '</div>';
+                });
+                
+                var chatBox = document.getElementById('chat-messages');
+                chatBox.innerHTML = chatHtml;
+                chatBox.scrollTop = chatBox.scrollHeight;
+            } catch (e) {
+                console.error("Failed to load chat history", e);
+            }
+        }
+
+        async function sendChatMessage() {
+            var input = document.getElementById('chat-composer');
+            var text = input.value.trim();
+            if (!text || !activeChatPhone) return;
+            
+            input.disabled = true;
+            try {
+                var res = await fetch('/admin/inbox/send', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ phone: activeChatPhone, message: text })
+                });
+                if (res.ok) {
+                    input.value = '';
+                    openChat(activeChatPhone, document.getElementById('chat-header-name').innerText);
+                    loadConversations();
+                } else {
+                    alert('Failed to send message');
+                }
+            } catch (e) {
+                alert('Network Error');
+            }
+            input.disabled = false;
+            input.focus();
+        }
+
+        // --- Inbox Logic ---
+        var activeChatPhone = null;
+
+        async function loadConversations() {
+            try {
+                var res = await fetch('/admin/inbox/conversations');
+                var data = await res.json();
+                var list = document.getElementById('conversations-list');
+                list.innerHTML = '';
+                
+                if (data.length === 0) {
+                    list.innerHTML = '<div style="padding:40px; text-align:center; color:#94a3b8;">No messages yet.</div>';
+                    return;
+                }
+
+                data.forEach(function(conv) {
+                    var el = document.createElement('div');
+                    el.className = 'conversation-item';
+                    el.setAttribute('data-phone', conv.phone);
+                    if (conv.phone === activeChatPhone) el.classList.add('active');
+                    
+                    var time = new Date(conv.timestamp).toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'});
+                    var preview = conv.message_type === 'text' ? conv.content : '[' + conv.message_type + ']';
+                    
+                    // Try to extract name if temp_members exists
+                    var nameDisplay = conv.phone;
+                    try {
+                        if (conv.temp_members) {
+                            var members = JSON.parse(conv.temp_members);
+                            if (members && members.length > 0) nameDisplay = members[0] + ' (' + conv.phone + ')';
+                        }
+                    } catch(e) {}
+
+                    el.innerHTML = '<span class="conversation-time">' + time + '</span>' +
+                                   '<div class="conversation-phone">' + nameDisplay + '</div>' +
+                                   '<div class="conversation-preview">' + preview + '</div>';
+                                   
+                    el.onclick = function() { openChat(conv.phone, nameDisplay); };
+                    list.appendChild(el);
+                });
+            } catch (e) {
+                console.error("Failed to load conversations:", e);
+            }
+        }
+
+        function filterConversations() {
+            var input = document.getElementById('inbox-search-input').value.toLowerCase();
+            document.querySelectorAll('.conversation-item').forEach(function(el) {
+                if (el.innerText.toLowerCase().includes(input)) el.style.display = '';
+                else el.style.display = 'none';
+            });
+        }
+
+        async function openChat(phone, nameDisplay) {
+            activeChatPhone = phone;
+            document.getElementById('chat-empty').style.display = 'none';
+            document.getElementById('chat-area').style.display = 'flex';
+            document.getElementById('chat-header-name').innerText = nameDisplay || phone;
+            document.getElementById('chat-messages').innerHTML = '<div style="text-align:center; padding:20px; color:#94a3b8;">Loading...</div>';
+            
+            // Highlight selected
+            document.querySelectorAll('.conversation-item').forEach(function(el) { el.classList.remove('active'); });
+            var activeEl = document.querySelector('.conversation-item[data-phone="'+phone+'"]');
+            if (activeEl) activeEl.classList.add('active');
+
+            try {
+                var res = await fetch('/admin/inbox/messages/' + phone);
+                var messages = await res.json();
+                
+                var chatHtml = '';
+                messages.forEach(function(msg) {
+                    var time = new Date(msg.timestamp).toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'});
+                    var typeClass = msg.direction === 'inbound' ? 'msg-inbound' : 'msg-outbound';
+                    
+                    var content = msg.content;
+                    if (msg.message_type === 'image' && msg.media_url) {
+                        content = '<a href="' + msg.media_url + '" target="_blank" style="color:inherit; text-decoration:underline;">[View Image]</a><br>' + content;
+                    } else if (msg.message_type === 'document' && msg.media_url) {
+                         content = '<a href="' + msg.media_url + '" target="_blank" style="color:inherit; text-decoration:underline;">[Download Document]</a><br>' + content;
+                    }
+
+                    chatHtml += '<div class="msg-bubble ' + typeClass + '">' +
+                                content +
+                                '<span class="msg-time">' + time + '</span>' +
+                                '</div>';
+                });
+                
+                var chatBox = document.getElementById('chat-messages');
+                chatBox.innerHTML = chatHtml;
+                chatBox.scrollTop = chatBox.scrollHeight;
+            } catch (e) {
+                console.error("Failed to load chat history", e);
+            }
+        }
+
+        async function sendChatMessage() {
+            var input = document.getElementById('chat-composer');
+            var text = input.value.trim();
+            if (!text || !activeChatPhone) return;
+            
+            input.disabled = true;
+            try {
+                var res = await fetch('/admin/inbox/send', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ phone: activeChatPhone, message: text })
+                });
+                if (res.ok) {
+                    input.value = '';
+                    openChat(activeChatPhone, document.getElementById('chat-header-name').innerText);
+                    loadConversations();
+                } else {
+                    alert('Failed to send message');
+                }
+            } catch (e) {
+                alert('Network Error');
+            }
+            input.disabled = false;
+            input.focus();
+        }
 
         async function addAdmin() {
             var phone = document.getElementById('new-admin-phone').value;

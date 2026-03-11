@@ -25,6 +25,34 @@ async function sendWhatsAppMessage(phone, data) {
                 }
             }
         );
+
+        // Save outbound message to DB (excluding interactive template headers for brevity)
+        try {
+            let msgType = data.type;
+            let content = '';
+            let mediaUrl = null;
+
+            if (msgType === 'text') {
+                content = data.text.body;
+            } else if (msgType === 'image') {
+                mediaUrl = data.image.link || data.image.id;
+                content = data.image.caption || '';
+            } else if (msgType === 'document') {
+                mediaUrl = data.document.link || data.document.id;
+                content = data.document.caption || data.document.filename || '';
+            } else if (msgType === 'interactive') {
+                // For interactive messages, log the body text
+                content = data.interactive.body ? data.interactive.body.text : 'Interactive Message';
+            }
+
+            await db.query(
+                "INSERT INTO mn_messages (phone, direction, message_type, content, media_url, status) VALUES (?, 'outbound', ?, ?, ?, 'sent')",
+                [phone, msgType, content, mediaUrl]
+            );
+        } catch (dbErr) {
+            console.error("❌ Failed to log outbound message:", dbErr.message);
+        }
+
         return response.data;
     } catch (error) {
         console.error("❌ WhatsApp API Error:", error.response ? error.response.data : error.message);
@@ -57,15 +85,14 @@ async function sendText(phone, text) {
 // ---------------------------------------------------------
 
 async function sendMNWelcome(phone) {
-    let msg = "Muscat Star Night 2026 Season 4 🔥🎧\n\n" +
-        "\"Muscattttt… Are you readyyyyy?!!\" 🌟\n\n" +
-        "This is your official call to the biggest entertainment night of the year…\n\n" +
-        "Welcome to Muscat Star Night 2026 – Season 4!\n\n" +
-        "On April 10, Friday…\n\n" +
-        "At Muscat Club, Al Wadi Kabir…\n\n" +
-        "We are bringing you non-stop music, live performances, and a massive food festival under one roof! 🎶✨";
+    let msg = "🌟 Welcome to Muscat Star Night 2026 – Season 4 �\n" +
+        "Join us for the biggest entertainment night of the year!\n" +
+        "📅 Friday, 10 April 2026\n" +
+        "🕓 4:00 PM\n" +
+        "📍 Muscat Club, Al Wadi Kabir\n" +
+        "Get ready for an unforgettable evening of music and energy. �🔥";
 
-    const imageUrl = "https://lh3.googleusercontent.com/d/1Aosg-daRT0Dp8_lhxy7mNNS_WnlWoBL9";
+    const imageUrl = "https://lh3.googleusercontent.com/d/1ZEgghNPZH0m0KCBCjH8bSAxS3Oi0BrJ6";
 
     return sendWhatsAppMessage(phone, {
         type: "interactive",
@@ -86,7 +113,7 @@ async function sendMNWelcome(phone) {
 }
 
 async function sendMNCategorySelect(phone) {
-    const imageUrl = "https://lh3.googleusercontent.com/d/1VyFxQIWWQNB2pFHnm_iwAbjBQlY_38q2";
+    const imageUrl = "https://lh3.googleusercontent.com/d/1i_4DPALP-opm1ap7H_RKxikzxhz_Vtmv";
 
     // 1. Try sending seating layout image (with failover)
     try {
@@ -103,8 +130,8 @@ async function sendMNCategorySelect(phone) {
         type: "interactive",
         interactive: {
             type: "list",
-            header: { type: "text", text: "Ticket Selection" },
-            body: { text: "Please select your seating category below:" },
+            header: { type: "text", text: "🎟 Select Your Seat" },
+            body: { text: "Choose your category.\n🎫 View layout above." },
             footer: { text: "Music Night Muscat 2026" },
             action: {
                 button: "View Categories",
@@ -112,10 +139,10 @@ async function sendMNCategorySelect(phone) {
                     {
                         title: "Available Categories",
                         rows: [
-                            { id: "CAT_VVIP", title: "VVIP", description: "OMR 60" },
-                            { id: "CAT_VIP", title: "VIP", description: "OMR 40" },
-                            { id: "CAT_GOLD", title: "GOLD", description: "OMR 20" },
-                            { id: "CAT_SILVER", title: "SILVER", description: "OMR 10" }
+                            { id: "CAT_GUEST", title: "GUEST", description: "OMR 50" },
+                            { id: "CAT_VVIP", title: "VVIP", description: "OMR 20" },
+                            { id: "CAT_VIP", title: "VIP", description: "OMR 10" },
+                            { id: "CAT_GOLD", title: "GOLD", description: "OMR 5" }
                         ]
                     }
                 ]
@@ -140,8 +167,8 @@ async function sendMNQuantityRequest(phone, category, availableSeats) {
         type: "interactive",
         interactive: {
             type: "list",
-            header: { type: "text", text: `Select Quantity (Max ${maxQty})` },
-            body: { text: `🎫 There are ${availableSeats} tickets remaining in ${category}. How many would you like to book?` },
+            header: { type: "text", text: `Select Quantity` },
+            body: { text: `How many tickets?` },
             footer: { text: "Music Night Muscat 2026" },
             action: {
                 button: "Choose Quantity",
@@ -164,12 +191,16 @@ async function showMNBookingSummary(phone, bookingData) {
     let price = getCategoryPrice(bookingData.category);
     let total = price * bookingData.quantity;
 
-    let txt = `*Booking Summary* 🎫\n\n` +
-        `• *Category:* ${bookingData.category}\n` +
-        `• *Quantity:* ${bookingData.quantity} Ticket(s)\n` +
-        `• *Name:* ${bookingData.members.join(", ")}\n\n` +
-        `*Total Amount:* OMR ${total.toFixed(2)}\n\n` +
-        `Please confirm your selection and proceed to payment.`;
+    let txt = `🎫 Please Confirm Your Ticket\n` +
+        `Booking Summary\n` +
+        `Music Night Muscat 2026\n` +
+        `🎫 Category: ${bookingData.category}\n` +
+        `🪑 Quantity: ${bookingData.quantity}\n` +
+        `👤 Name: ${bookingData.members.join(", ")}\n` +
+        `💰 Total Amount: OMR ${total.toFixed(2)}\n` +
+        `📅 Date: 10 April 2026 | 🕓 4:00 PM\n` +
+        `📍 Venue: Muscat Club, Al Wadi Kabir\n` +
+        `✅ Kindly confirm to complete your booking`;
 
     return sendWhatsAppMessage(phone, {
         type: "interactive",
@@ -187,28 +218,25 @@ async function showMNBookingSummary(phone, bookingData) {
 }
 
 async function sendMNPaymentRequest(phone) {
-    const paymentQrUrl = "https://lh3.googleusercontent.com/d/1PgQY8UgeUxsbv7KKs0J-G5bMQhMx5n9U";
+    const paymentQrUrl = "https://lh3.googleusercontent.com/d/1j8FkUkKn69dtiFFLD1iwhQ2GSe688VIm";
 
     // Consolidate into one message to ensure correct order and grouping
     return sendWhatsAppMessage(phone, {
         type: "image",
         image: {
             link: paymentQrUrl,
-            caption: "💳 *Step 1: Transfer Funds*\n\n" +
-                "*Bank Details:*\n" +
-                "• *Account Name:* National High Peak LLC\n" +
-                "• *Bank:* Bank Muscat\n" +
-                "• *Branch:* Al Mawaleh Branch\n" +
-                "• *Account No:* `0312045922200018`\n" +
-                "• *IBAN:* `OM610270312045922200018`\n\n" +
-                "📸 *Step 2: Upload Receipt*\n" +
-                "After payment, *please send a photo or PDF of your payment slip here* so we can verify and issue your ticket."
+            caption: "💳 Step 1: Transfer Funds\n" +
+                "Account Name: National High Peak LLC\n" +
+                "Bank / Branch: Bank Muscat, Al Mawaleh\n" +
+                "A/C No: 0312045922200018 | IBAN: OM610270312045922200018\n" +
+                "📸 Step 2: Upload Receipt\n" +
+                "Please share a photo or PDF of your payment to confirm your ticket"
         }
     });
 }
 
 function getCategoryPrice(category) {
-    const prices = { "VVIP": 60, "VIP": 40, "GOLD": 20, "SILVER": 10 };
+    const prices = { "GUEST": 50, "VVIP": 20, "VIP": 10, "GOLD": 5 };
     return prices[category] || 0;
 }
 
@@ -692,9 +720,20 @@ async function authorizeAndSendTicket(bookingNo) {
     }
 }
 
+async function sendManualMessage(phone, text) {
+    try {
+        await sendText(phone, text);
+        return { success: true };
+    } catch (error) {
+        console.error("❌ Failed to send manual message:", error);
+        return { success: false, error: error.message };
+    }
+}
+
 module.exports = {
     handleMusicNightFlow,
     authorizeAndSendTicket,
     generateAdminOTP,
-    notifyAdminsOfPayment
+    notifyAdminsOfPayment,
+    sendManualMessage
 };
