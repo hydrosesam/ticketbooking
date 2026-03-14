@@ -245,6 +245,21 @@ async function sendMNPaymentRequest(phone) {
     });
 }
 
+async function sendMNRestrictedCategoryInfo(phone, text) {
+    return sendWhatsAppMessage(phone, {
+        type: "interactive",
+        interactive: {
+            type: "button",
+            body: { text: text },
+            action: {
+                buttons: [
+                    { type: "reply", reply: { id: "RESTART", title: "🏠 Main Menu" } }
+                ]
+            }
+        }
+    });
+}
+
 function getCategoryPrice(category) {
     const prices = { "GUEST": 50, "VVIP": 20, "VIP": 10, "GOLD": 5 };
     return prices[category] || 0;
@@ -490,8 +505,8 @@ async function handleMusicNightFlow(phone, event) {
                         `📍 Muscat Club, Al Wadi Kabir\n\n\n` +
                         `📞 For Tickets, Contact Us:\n` +
                         `+968 95950347 , +968 90447172`;
-                    await sendText(phone, guestTxt);
-                    return await sendMNCategorySelect(phone);
+                    await sendMNRestrictedCategoryInfo(phone, guestTxt);
+                    return;
                 }
 
                 if (category === "VVIP") {
@@ -502,8 +517,8 @@ async function handleMusicNightFlow(phone, event) {
                         `📍 Muscat Club, Al Wadi Kabir\n\n\n` +
                         `📞 For Tickets, Contact Us:\n` +
                         `+968 95950347 , +968 90447172`;
-                    await sendText(phone, vvipTxt);
-                    return await sendMNCategorySelect(phone);
+                    await sendMNRestrictedCategoryInfo(phone, vvipTxt);
+                    return;
                 }
 
                 if (category === "VIP") {
@@ -514,8 +529,8 @@ async function handleMusicNightFlow(phone, event) {
                         `📍 Muscat Club, Al Wadi Kabir\n\n\n` +
                         `📞 For Tickets, Contact Us:\n` +
                         `+968 95950347 , +968 90447172`;
-                    await sendText(phone, vipTxt);
-                    return await sendMNCategorySelect(phone);
+                    await sendMNRestrictedCategoryInfo(phone, vipTxt);
+                    return;
                 }
                 // ----------------------------
 
