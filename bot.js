@@ -488,6 +488,9 @@ async function handleMusicNightFlow(phone, event) {
                     await saveTempData(phone, 'category', category);
                     await sendMNQuantityRequest(phone, category, available);
                     await saveUserState(phone, "MN_QUANTITY_INPUT");
+                } else {
+                    await sendText(phone, `⚠️ Sorry, the category *${category}* is currently unavailable. Please choose another.`);
+                    await sendMNCategorySelect(phone);
                 }
             } else {
                 await sendText(phone, "⚠️ *Please select a category* from the list provided.");

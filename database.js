@@ -101,6 +101,7 @@ async function initDatabase() {
         // Seed initial capacities (INSERT IGNORE preserves existing data)
         await connection.query(`
             INSERT IGNORE INTO mn_inventory (category, total_seats, booked_seats) VALUES
+            ('GUEST', 20, 0),
             ('VVIP', 50, 0),
             ('VIP', 100, 0),
             ('GOLD', 200, 0),
