@@ -6,6 +6,13 @@ const { generateTicketPDF, generateQRCode } = require('./pdf_generator');
 
 const WHATSAPP_ACCESS_TOKEN = process.env.WHATSAPP_ACCESS_TOKEN || 'EAAdPlcYFproBQLR1YAW2X176hNT7bHwfKIWhZCBlbH5b3BChXhah9gViOQLZBwycsCuSUuqN8gzJZA9vZBBCcRZBXZBdZCk8zHwuIsLnuS3k5HFnqSPeIZCZC0kSBWGTNisu6DLYWZA8LjIuAfnBkU5E9aQiQJVczG3naqaCi1siCPTj8UBENXZBNmEptcw4yupBUtFyQZDZD';
 const PHONE_NUMBER_ID = process.env.WHATSAPP_PHONE_NUMBER_ID || '658261390699917';
+const BASE_URL = process.env.PUBLIC_URL || 'https://eventz.cloud';
+
+function ensureAbsoluteUrl(url) {
+    if (!url) return url;
+    if (url.startsWith('http')) return url;
+    return `${BASE_URL}${url.startsWith('/') ? '' : '/'}${url}`;
+}
 
 async function sendWhatsAppMessage(phone, data) {
     try {
@@ -54,7 +61,11 @@ async function sendWhatsAppMessage(phone, data) {
 
         return response.data;
     } catch (error) {
-        console.error("❌ WhatsApp API Error:", error.response ? error.response.data : error.message);
+        if (error.response && error.response.data) {
+            console.error("❌ WhatsApp API Error Body:", JSON.stringify(error.response.data, null, 2));
+        } else {
+            console.error("❌ WhatsApp API Error:", error.message);
+        }
         throw error;
     }
 }
@@ -236,7 +247,7 @@ async function sendMNPaymentRequest(phone) {
     return sendWhatsAppMessage(phone, {
         type: "image",
         image: {
-            link: paymentQrUrl,
+            link: ensureAbsoluteUrl(paymentQrUrl),
             caption: "💳 *Step 1: Transfer Funds*\n\n" +
                 `*Mobile Transfer : ${paymentMobile}*\n\n` +
                 "📸 *Step 2: Upload Receipt*\n\n" +
