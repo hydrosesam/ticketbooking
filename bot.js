@@ -439,24 +439,41 @@ async function handleMusicNightFlow(phone, event) {
 
         // Check for media
         if (event && event.type && (event.type === 'image' || event.type === 'document')) {
-            const mediaObj = event[event.type];
+            const mediaType = event.type;
+            const mediaObj = event[mediaType];
+            console.log(`[MEDIA] Attempting download of ${mediaType} ID: ${mediaObj.id}`);
+
             try {
                 const mediaRes = await axios.get(`https://graph.facebook.com/v17.0/${mediaObj.id}`, {
                     headers: { 'Authorization': `Bearer ${WHATSAPP_ACCESS_TOKEN}` }
                 });
-                const fileRes = await axios.get(mediaRes.data.url, {
+
+                const mimeType = mediaRes.data.mime_type;
+                const fileUrl = mediaRes.data.url;
+                console.log(`[MEDIA] Download URL for ${mediaObj.id}: ${fileUrl.substring(0, 50)}... | Mime: ${mimeType}`);
+
+                const fileRes = await axios.get(fileUrl, {
                     headers: { 'Authorization': `Bearer ${WHATSAPP_ACCESS_TOKEN}` },
                     responseType: 'arraybuffer'
                 });
 
-                const ext = event.type === 'image' ? 'jpg' : 'pdf';
+                // Detect extension properly
+                let ext = 'jpg'; // default
+                if (mimeType === 'application/pdf') ext = 'pdf';
+                else if (mimeType === 'image/png') ext = 'png';
+                else if (mimeType === 'image/webp') ext = 'webp';
+                else if (mimeType === 'image/jpeg') ext = 'jpg';
+                else if (mediaType === 'document' && !mimeType.includes('image')) ext = 'pdf'; // Fallback for non-image docs
+
                 const fileName = `slip_${mediaObj.id}.${ext}`;
-                localPath = path.join(__dirname, 'uploads', fileName);
-                fs.writeFileSync(localPath, fileRes.data);
+                const absolutePath = path.join(__dirname, 'uploads', fileName);
+
+                fs.writeFileSync(absolutePath, fileRes.data);
+                console.log(`[MEDIA] File saved successfully to: ${absolutePath}`);
 
                 localPath = `/uploads/${fileName}`;
             } catch (e) {
-                console.error("Media error:", e.message);
+                console.error(`[MEDIA] ERROR downloading/saving ${mediaObj.id}:`, e.message);
             }
         }
 
