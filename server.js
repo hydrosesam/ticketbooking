@@ -4,6 +4,7 @@ const { Server } = require('socket.io');
 const cookieParser = require('cookie-parser');
 const path = require('path');
 const fs = require('fs');
+const multer = require('multer');
 const { handleMusicNightFlow, authorizeAndSendTicket, generateAdminOTP, sendManualMessage } = require('./bot');
 const db = require('./database');
 require('dotenv').config();
@@ -22,6 +23,16 @@ if (!fs.existsSync(UPLOADS_DIR)) fs.mkdirSync(UPLOADS_DIR, { recursive: true });
 
 // Serve the uploads folder statically so dashboard can show slips
 app.use('/uploads', express.static(UPLOADS_DIR));
+
+// Configure Multer for QR Code Uploads
+const storage = multer.diskStorage({
+    destination: (req, file, cb) => cb(null, UPLOADS_DIR),
+    filename: (req, file, cb) => {
+        const ext = path.extname(file.originalname);
+        cb(null, `payment_qr_${Date.now()}${ext}`);
+    }
+});
+const upload = multer({ storage });
 
 const VERIFY_TOKEN = process.env.VERIFY_TOKEN || 'ALTAZA_123';
 const PORT = process.env.PORT || 3000;
@@ -282,6 +293,17 @@ app.post('/admin/settings/update', requireAuth, async (req, res) => {
     try {
         await db.query("INSERT INTO mn_settings (setting_key, setting_value) VALUES (?, ?) ON DUPLICATE KEY UPDATE setting_value = VALUES(setting_value)", [key, value]);
         res.json({ success: true });
+    } catch (err) {
+        res.status(500).json({ error: err.message });
+    }
+});
+
+app.post('/admin/settings/upload-qr', requireAuth, upload.single('qr_image'), async (req, res) => {
+    if (!req.file) return res.status(400).json({ error: "No file uploaded" });
+    const fileUrl = `/uploads/${req.file.filename}`;
+    try {
+        await db.query("INSERT INTO mn_settings (setting_key, setting_value) VALUES (?, ?) ON DUPLICATE KEY UPDATE setting_value = VALUES(setting_value)", ['payment_qr_url', fileUrl]);
+        res.json({ success: true, url: fileUrl });
     } catch (err) {
         res.status(500).json({ error: err.message });
     }
@@ -968,8 +990,13 @@ app.get('/dashboard', requireAuth, async (req, res) => {
                     <div style="padding: 30px;">
                         <div style="margin-bottom:25px;">
                             <label style="display:block; font-weight:700; color:var(--primary); margin-bottom:10px;">Payment QR Image URL</label>
-                            <input type="text" id="setting-qr-url" class="edit-input" style="width:100%; text-align:left; padding:15px; font-weight:normal;" placeholder="https://...">
-                            <p style="font-size:12px; color:#64748b; margin-top:5px;">Public URL to the payment QR code image.</p>
+                            <div style="display:flex; gap:10px; align-items:center; margin-bottom:10px;">
+                                <input type="text" id="setting-qr-url" class="edit-input" style="flex:1; text-align:left; padding:15px; font-weight:normal;" placeholder="https://...">
+                                <span style="color:#64748b; font-weight:700;">OR</span>
+                                <input type="file" id="qr-upload-input" accept="image/*" style="display:none;" onchange="handleQRUpload(this)">
+                                <button class="btn-action" style="background:#f1f5f9; color:var(--primary); padding:15px 25px;" onclick="document.getElementById('qr-upload-input').click()">📁 Upload Image</button>
+                            </div>
+                            <p style="font-size:12px; color:#64748b; margin-top:5px;">Public URL OR upload a new image directly.</p>
                         </div>
                         <div style="margin-bottom:25px;">
                             <label style="display:block; font-weight:700; color:var(--primary); margin-bottom:10px;">Payment Mobile Number</label>
@@ -1245,6 +1272,29 @@ app.get('/dashboard', requireAuth, async (req, res) => {
                 headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify({ key, value })
             });
+        }
+
+        async function handleQRUpload(input) {
+            if (!input.files || !input.files[0]) return;
+            const file = input.files[0];
+            const formData = new FormData();
+            formData.append('qr_image', file);
+            
+            try {
+                const res = await fetch('/admin/settings/upload-qr', {
+                    method: 'POST',
+                    body: formData
+                });
+                const data = await res.json();
+                if (data.success) {
+                    document.getElementById('setting-qr-url').value = data.url;
+                    alert('QR Code uploaded and preview updated. Click "SAVE SETTINGS" to finalize.');
+                } else {
+                    alert('Upload failed: ' + data.error);
+                }
+            } catch (e) {
+                alert('Upload Error');
+            }
         }
 
         async function saveAllSettings() {
