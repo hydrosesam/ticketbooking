@@ -85,14 +85,16 @@ async function sendText(phone, text) {
 // ---------------------------------------------------------
 
 async function sendMNWelcome(phone) {
-    let msg = "🌟 Welcome to Muscat Star Night 2026 – Season 4 �\n" +
-        "Join us for the biggest entertainment night of the year!\n" +
+    let msg = "🌟 Welcome to Muscat Star Night 2026 – Season 4 🌟\n\n" +
+        "Join us for the biggest entertainment night of the year!\n\n" +
         "📅 Friday, 10 April 2026\n" +
-        "🕓 4:00 PM\n" +
-        "📍 Muscat Club, Al Wadi Kabir\n" +
-        "Get ready for an unforgettable evening of music and energy. �🔥";
+        "🕓 5:00 PM\n" +
+        "🚪 Gate Open - 3:00 PM\n" +
+        "📍 Muscat Club, Al Wadi Kabir\n\n" +
+        "Get ready for an unforgettable evening of music and energy. 🎧🔥\n\n" +
+        "📞 More Info: +968 95950347, 90447172";
 
-    const imageUrl = "https://lh3.googleusercontent.com/d/1ZEgghNPZH0m0KCBCjH8bSAxS3Oi0BrJ6";
+    const imageUrl = "https://lh3.googleusercontent.com/d/11Pwc7Ux7W5XT12jFSDvOQxu1FCIIM27m";
 
     return sendWhatsAppMessage(phone, {
         type: "interactive",
@@ -113,7 +115,7 @@ async function sendMNWelcome(phone) {
 }
 
 async function sendMNCategorySelect(phone) {
-    const imageUrl = "https://lh3.googleusercontent.com/d/1i_4DPALP-opm1ap7H_RKxikzxhz_Vtmv";
+    const imageUrl = "https://lh3.googleusercontent.com/d/11Pwc7Ux7W5XT12jFSDvOQxu1FCIIM27m";
 
     // 1. Try sending seating layout image (with failover)
     try {
@@ -139,7 +141,7 @@ async function sendMNCategorySelect(phone) {
                     {
                         title: "Available Categories",
                         rows: [
-                            { id: "CAT_GUEST", title: "GUEST", description: "OMR 50" },
+                            { id: "CAT_GUEST", title: "GUEST", description: "OMR 50 | Sofa Seating (2nd & 3rd Row)" },
                             { id: "CAT_VVIP", title: "VVIP", description: "OMR 20" },
                             { id: "CAT_VIP", title: "VIP", description: "OMR 10" },
                             { id: "CAT_GOLD", title: "GOLD", description: "OMR 5" }
@@ -192,14 +194,15 @@ async function showMNBookingSummary(phone, bookingData) {
     let total = price * bookingData.quantity;
 
     let txt = `🎫 Please Confirm Your Ticket\n` +
-        `Booking Summary\n` +
-        `Music Night Muscat 2026\n` +
-        `🎫 Category: ${bookingData.category}\n` +
-        `🪑 Quantity: ${bookingData.quantity}\n` +
-        `👤 Name: ${bookingData.members.join(", ")}\n` +
-        `💰 Total Amount: OMR ${total.toFixed(2)}\n` +
-        `📅 Date: 10 April 2026 | 🕓 4:00 PM\n` +
-        `📍 Venue: Muscat Club, Al Wadi Kabir\n` +
+        `*Muscat STAR Night 2026*\n\n` +
+        `*Booking Summary*\n` +
+        `Music Night Muscat 2026\n\n` +
+        `*🎫 Category: ${bookingData.category}*\n` +
+        `*🪑 Quantity: ${bookingData.quantity}*\n` +
+        `*👤 Name: ${bookingData.members.join(", ")}*\n` +
+        `*💰 Total Amount: OMR ${total.toFixed(2)}*\n` +
+        `*📅 Date: 10 April 2026 | 🕓 5:00 PM*\n` +
+        `*📍 Venue: Muscat Club, Al Wadi Kabir*\n\n` +
         `✅ Kindly confirm to complete your booking`;
 
     return sendWhatsAppMessage(phone, {
@@ -217,19 +220,27 @@ async function showMNBookingSummary(phone, bookingData) {
     });
 }
 
-async function sendMNPaymentRequest(phone) {
-    const paymentQrUrl = "https://lh3.googleusercontent.com/d/1j8FkUkKn69dtiFFLD1iwhQ2GSe688VIm";
+async function getSetting(key, defaultValue = null) {
+    try {
+        const rows = await db.query("SELECT setting_value FROM mn_settings WHERE setting_key = ?", [key]);
+        return (rows.length > 0 && rows[0].setting_value !== null) ? rows[0].setting_value : defaultValue;
+    } catch (e) {
+        console.error(`❌ Error fetching setting ${key}:`, e.message);
+        return defaultValue;
+    }
+}
 
-    // Consolidate into one message to ensure correct order and grouping
+async function sendMNPaymentRequest(phone) {
+    const paymentQrUrl = await getSetting('payment_qr_url', "https://lh3.googleusercontent.com/d/1j8FkUkKn69dtiFFLD1iwhQ2GSe688VIm");
+    const paymentMobile = await getSetting('payment_mobile', "+968 76944041");
+
     return sendWhatsAppMessage(phone, {
         type: "image",
         image: {
             link: paymentQrUrl,
-            caption: "💳 Step 1: Transfer Funds\n" +
-                "Account Name: National High Peak LLC\n" +
-                "Bank / Branch: Bank Muscat, Al Mawaleh\n" +
-                "A/C No: 0312045922200018 | IBAN: OM610270312045922200018\n" +
-                "📸 Step 2: Upload Receipt\n" +
+            caption: "💳 *Step 1: Transfer Funds*\n\n" +
+                `*Mobile Transfer : ${paymentMobile}*\n\n` +
+                "📸 *Step 2: Upload Receipt*\n\n" +
                 "Please share a photo or PDF of your payment to confirm your ticket"
         }
     });

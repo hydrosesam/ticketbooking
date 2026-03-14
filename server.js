@@ -265,6 +265,29 @@ app.post('/admin/inbox/mark-read', requireAuth, async (req, res) => {
 });
 
 // ======================================
+// Settings API Endpoints
+// ======================================
+app.get('/admin/settings', requireAuth, async (req, res) => {
+    try {
+        const rows = await db.query("SELECT * FROM mn_settings");
+        res.json(rows);
+    } catch (err) {
+        res.status(500).json({ error: err.message });
+    }
+});
+
+app.post('/admin/settings/update', requireAuth, async (req, res) => {
+    const { key, value } = req.body;
+    if (!key) return res.status(400).json({ error: "Key required" });
+    try {
+        await db.query("INSERT INTO mn_settings (setting_key, setting_value) VALUES (?, ?) ON DUPLICATE KEY UPDATE setting_value = VALUES(setting_value)", [key, value]);
+        res.json({ success: true });
+    } catch (err) {
+        res.status(500).json({ error: err.message });
+    }
+});
+
+// ======================================
 // Webhook Verification (Required by Meta)
 // ======================================
 app.get('/webhook', (req, res) => {
@@ -591,6 +614,7 @@ app.get('/dashboard', requireAuth, async (req, res) => {
                 <div class="nav-item" onclick="showTab('pending', this)">🕒 Pending</div>
                 <div class="nav-item" onclick="showTab('approved', this)">✅ Approved</div>
                 <div class="nav-item" onclick="showTab('balance', this)">💰 Balance</div>
+                <div class="nav-item" onclick="showTab('settings', this)">⚙️ Settings</div>
                 ` : ''}
                 <div class="nav-item ${!isAdmin ? 'active' : ''}" onclick="showTab('scanner', this)">📷 Scan Ticket</div>
                 <div class="nav-item" onclick="showTab('history', this)">🏁 Verified List</div>
@@ -930,6 +954,32 @@ app.get('/dashboard', requireAuth, async (req, res) => {
                         </table>
                 </div>
             </div>
+            </div>
+
+            <!-- SETTINGS SECTION -->
+            <div id="settings" class="section">
+                <div style="margin-bottom: 30px;">
+                    <h1 style="margin:0; font-size:28px; font-weight:800;">System Settings</h1>
+                    <p style="color:#64748b;">Configure global bot variables and payment details</p>
+                </div>
+                
+                <div class="card-table">
+                    <div class="table-header"><h2>Payment Configuration</h2></div>
+                    <div style="padding: 30px;">
+                        <div style="margin-bottom:25px;">
+                            <label style="display:block; font-weight:700; color:var(--primary); margin-bottom:10px;">Payment QR Image URL</label>
+                            <input type="text" id="setting-qr-url" class="edit-input" style="width:100%; text-align:left; padding:15px; font-weight:normal;" placeholder="https://...">
+                            <p style="font-size:12px; color:#64748b; margin-top:5px;">Public URL to the payment QR code image.</p>
+                        </div>
+                        <div style="margin-bottom:25px;">
+                            <label style="display:block; font-weight:700; color:var(--primary); margin-bottom:10px;">Payment Mobile Number</label>
+                            <input type="text" id="setting-mobile" class="edit-input" style="width:100%; text-align:left; padding:15px; font-weight:normal;" placeholder="+968 ...">
+                            <p style="font-size:12px; color:#64748b; margin-top:5px;">Mobile number displayed for mobile transfers.</p>
+                        </div>
+                        <button class="btn-action btn-approve" style="padding:15px 40px; font-size:16px;" onclick="saveAllSettings()">SAVE SETTINGS</button>
+                    </div>
+                </div>
+            </div>
             ` : ''}
         </div>
     </div>
@@ -1178,8 +1228,40 @@ app.get('/dashboard', requireAuth, async (req, res) => {
         }
 
         // Auto-tab if coming from QR link
+        async function loadSettings() {
+            try {
+                const res = await fetch('/admin/settings');
+                const data = await res.json();
+                data.forEach(s => {
+                    if (s.setting_key === 'payment_qr_url') document.getElementById('setting-qr-url').value = s.setting_value || '';
+                    if (s.setting_key === 'payment_mobile') document.getElementById('setting-mobile').value = s.setting_value || '';
+                });
+            } catch(e) { console.error("Load settings failed", e); }
+        }
+
+        async function saveSetting(key, value) {
+            return fetch('/admin/settings/update', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ key, value })
+            });
+        }
+
+        async function saveAllSettings() {
+            const qr = document.getElementById('setting-qr-url').value;
+            const mobile = document.getElementById('setting-mobile').value;
+            
+            try {
+                await saveSetting('payment_qr_url', qr);
+                await saveSetting('payment_mobile', mobile);
+                alert('Settings saved successfully!');
+                location.reload();
+            } catch(e) { alert('Failed to save settings'); }
+        }
+
         window.addEventListener('load', function() {
             ['pending', 'approved', 'balance', 'history'].forEach(function(id) { renderPagination(id); });
+            loadSettings();
             
             var params = new URLSearchParams(window.location.search);
             if (params.has('id')) {
