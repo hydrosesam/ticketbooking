@@ -469,29 +469,38 @@ async function handleMusicNightFlow(phone, event) {
                 });
 
                 // Detect extension properly
-                let ext = 'jpg'; // default
-                if (mimeType === 'application/pdf') ext = 'pdf';
-                else if (mimeType === 'image/png') ext = 'png';
-                else if (mimeType === 'image/webp') ext = 'webp';
-                else if (mimeType === 'image/jpeg') ext = 'jpg';
-                else if (mediaType === 'document' && !mimeType.includes('image')) ext = 'pdf'; // Fallback for non-image docs
+                const extensionMap = {
+                    'application/pdf': 'pdf',
+                    'image/jpeg': 'jpg',
+                    'image/png': 'png',
+                    'image/webp': 'webp',
+                    'image/gif': 'gif'
+                };
+
+                let ext = extensionMap[mimeType] || 'bin';
+                if (ext === 'bin') {
+                    if (mimeType.includes('image')) ext = 'jpg';
+                    else if (mimeType.includes('pdf')) ext = 'pdf';
+                    else if (mediaType === 'image') ext = 'jpg';
+                    else if (mediaType === 'document') ext = 'pdf';
+                }
 
                 const fileName = `slip_${mediaObj.id}.${ext}`;
                 const absolutePath = path.join(__dirname, 'uploads', fileName);
 
+                console.log(`[MEDIA] Saving to: ${absolutePath}`);
                 fs.writeFileSync(absolutePath, fileRes.data);
-                console.log(`[MEDIA] File saved successfully to: ${absolutePath}`);
+                console.log(`[MEDIA] File write completed.`);
 
                 localPath = `/uploads/${fileName}`;
             } catch (e) {
-                console.error(`[MEDIA] ERROR downloading/saving ${mediaObj.id}:`, e.message);
+                console.error(`[MEDIA] ERROR processing ${mediaObj.id}:`, e.message);
+                if (e.response) console.error(`[MEDIA] Meta detail:`, JSON.stringify(e.response.data));
             }
         }
 
         if (localPath) {
-            const price = getCategoryPrice(user.category);
-            const expectedAmount = price * user.quantity;
-
+            console.log(`[FLOW] Payment proof received. Path: ${localPath}`);
             await saveTempData(phone, 'slip_url', localPath);
             await processPendingBooking(phone, user, localPath, ocrResult);
             return;
