@@ -3,7 +3,6 @@ const fs = require('fs');
 const path = require('path');
 const db = require('./database');
 const { generateTicketPDF, generateQRCode } = require('./pdf_generator');
-const Tesseract = require('tesseract.js');
 
 const WHATSAPP_ACCESS_TOKEN = process.env.WHATSAPP_ACCESS_TOKEN || 'EAAdPlcYFproBQLR1YAW2X176hNT7bHwfKIWhZCBlbH5b3BChXhah9gViOQLZBwycsCuSUuqN8gzJZA9vZBBCcRZBXZBdZCk8zHwuIsLnuS3k5HFnqSPeIZCZC0kSBWGTNisu6DLYWZA8LjIuAfnBkU5E9aQiQJVczG3naqaCi1siCPTj8UBENXZBNmEptcw4yupBUtFyQZDZD';
 const PHONE_NUMBER_ID = process.env.WHATSAPP_PHONE_NUMBER_ID || '658261390699917';
@@ -440,11 +439,6 @@ async function handleMusicNightFlow(phone, event) {
                 localPath = path.join(__dirname, 'uploads', fileName);
                 fs.writeFileSync(localPath, fileRes.data);
 
-                if (event.type === 'image') {
-                    console.log(`[OCR] Processing image ${mediaObj.id}...`);
-                    const { data: { text } } = await Tesseract.recognize(localPath, 'eng');
-                    ocrResult = extractPaymentInfo(text);
-                }
                 localPath = `/uploads/${fileName}`;
             } catch (e) {
                 console.error("Media error:", e.message);
@@ -454,21 +448,6 @@ async function handleMusicNightFlow(phone, event) {
         if (localPath) {
             const price = getCategoryPrice(user.category);
             const expectedAmount = price * user.quantity;
-
-            if (ocrResult) {
-                if (ocrResult.transactionId) {
-                    const dupCheck = await db.query("SELECT booking_no FROM mn_bookings WHERE bank_transaction_id = ?", [ocrResult.transactionId]);
-                    if (dupCheck.length > 0) return await sendText(phone, "❌ *Transaction ID is already processed.*");
-                } else {
-                    return await sendText(phone, "❌ *Transaction ID not found.* Please ensure the photo is clear.");
-                }
-
-                if (ocrResult.amount !== null && ocrResult.amount < expectedAmount) {
-                    return await sendText(phone, `❌ *Your amount mismatch.*\nExpected: OMR ${expectedAmount.toFixed(2)}\nFound: OMR ${ocrResult.amount.toFixed(2)}`);
-                }
-            } else if (event && event.type === 'image') {
-                return await sendText(phone, "❌ *Transaction ID not found.* We couldn't read the details from the slip.");
-            }
 
             await saveTempData(phone, 'slip_url', localPath);
             await processPendingBooking(phone, user, localPath, ocrResult);
@@ -548,37 +527,6 @@ async function handleMusicNightFlow(phone, event) {
             }
             break;
     }
-}
-
-/**
- * Parses OCR text to extract Bank Muscat transaction details.
- */
-function extractPaymentInfo(text) {
-    const info = { transactionId: null, amount: null, datetime: null, beneficiary: null, mobile: null };
-
-    // 1. Transaction ID (Typically starts with BMCT...)
-    const txIdMatch = text.match(/BMCT[0-9]{12}/i);
-    if (txIdMatch) info.transactionId = txIdMatch[0].toUpperCase();
-
-    // 2. Amount (Look for "Amount: OMR 27.000" or similar)
-    const amountMatch = text.match(/Amount:?\s?OMR?\s?([0-9]+\.[0-9]+)/i) || text.match(/Total Amount:?\s?OMR?\s?([0-9]+\.[0-9]+)/i);
-    if (amountMatch) info.amount = parseFloat(amountMatch[1]);
-
-    // 3. Date and Time
-    const dateMatch = text.match(/Transaction Date:?\s?([0-9/]+)/i);
-    const timeMatch = text.match(/Transaction time:?\s?([0-9:]+\s?(AM|PM)?)/i);
-    if (dateMatch && timeMatch) {
-        info.datetime = `${dateMatch[1]} ${timeMatch[1]}`.trim();
-    }
-
-    // 4. Beneficiary Details
-    const benMatch = text.match(/Beneficiary Name:?\s?([^\n]+)/i);
-    if (benMatch) info.beneficiary = benMatch[1].trim();
-
-    const mobileMatch = text.match(/Beneficiary Mobile:?\s?([^\n]+)/i);
-    if (mobileMatch) info.mobile = mobileMatch[1].trim();
-
-    return info.transactionId || info.amount ? info : null;
 }
 
 async function processPendingBooking(phone, user, slipUrl, ocrData = null) {
