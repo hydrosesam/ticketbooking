@@ -114,7 +114,7 @@ async function sendMNWelcome(phone) {
 }
 
 async function sendMNCategorySelect(phone) {
-    const imageUrl = "https://lh3.googleusercontent.com/d/11Pwc7Ux7W5XT12jFSDvOQxu1FCIIM27m";
+    const imageUrl = "https://lh3.googleusercontent.com/d/1avxu1WWjRb6BiBQvWZjnrbIZYrT8o10Q";
 
     // 1. Try sending seating layout image (with failover)
     try {
@@ -478,6 +478,47 @@ async function handleMusicNightFlow(phone, event) {
         case "MN_CATEGORY_SELECT":
             if (message.startsWith("CAT_")) {
                 const category = message.replace("CAT_", "");
+
+                // --- CATEGORY RESTRICTION ---
+                if (category === "GUEST") {
+                    let guestTxt = `*Muscat Star Night 2026*\n\n` +
+                        `🎫 Category: Guest\n` +
+                        `💺 Guest Ticket: 50 OMR\n` +
+                        `🛋 Seating: Sofa Seating\n` +
+                        `📍 Rows: 2nd & 3rd Row\n` +
+                        `📅 10 April 2026 | 🕓 4:00 PM\n` +
+                        `📍 Muscat Club, Al Wadi Kabir\n\n\n` +
+                        `📞 For Tickets, Contact Us:\n` +
+                        `+968 95950347 , +968 90447172`;
+                    await sendText(phone, guestTxt);
+                    return await sendMNCategorySelect(phone);
+                }
+
+                if (category === "VVIP") {
+                    let vvipTxt = `*Muscat Star Night 2026*\n\n` +
+                        `🎫 Category: VVIP\n` +
+                        `💺 VVIP Ticket: 20 OMR\n` +
+                        `📅 10 April 2026 | 🕓 4:00 PM\n` +
+                        `📍 Muscat Club, Al Wadi Kabir\n\n\n` +
+                        `📞 For Tickets, Contact Us:\n` +
+                        `+968 95950347 , +968 90447172`;
+                    await sendText(phone, vvipTxt);
+                    return await sendMNCategorySelect(phone);
+                }
+
+                if (category === "VIP") {
+                    let vipTxt = `Muscat Star Night 2026\n\n` +
+                        `🎫 Category: VIP\n` +
+                        `💺 VIP Ticket: 10 OMR\n` +
+                        `📅 10 April 2026 | 🕓 4:00 PM\n` +
+                        `📍 Muscat Club, Al Wadi Kabir\n\n\n` +
+                        `📞 For Tickets, Contact Us:\n` +
+                        `+968 95950347 , +968 90447172`;
+                    await sendText(phone, vipTxt);
+                    return await sendMNCategorySelect(phone);
+                }
+                // ----------------------------
+
                 const invRes = await db.query("SELECT * FROM mn_inventory WHERE category = ?", [category]);
                 if (invRes.length > 0) {
                     const available = invRes[0].total_seats - invRes[0].booked_seats;
