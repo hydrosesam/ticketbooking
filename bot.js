@@ -11,7 +11,9 @@ const BASE_URL = process.env.PUBLIC_URL || 'https://eventz.cloud';
 function ensureAbsoluteUrl(url) {
     if (!url) return url;
     if (url.startsWith('http')) return url;
-    return `${BASE_URL}${url.startsWith('/') ? '' : '/'}${url}`;
+    // If it's a local path like /uploads/..., use BASE_URL
+    const baseUrl = (process.env.PUBLIC_URL || 'https://eventz.cloud').replace(/\/$/, '');
+    return `${baseUrl}${url.startsWith('/') ? '' : '/'}${url}`;
 }
 
 async function sendWhatsAppMessage(phone, data) {
@@ -244,16 +246,23 @@ async function sendMNPaymentRequest(phone) {
     const paymentQrUrl = await getSetting('payment_qr_url', "https://lh3.googleusercontent.com/d/1j8FkUkKn69dtiFFLD1iwhQ2GSe688VIm");
     const paymentMobile = await getSetting('payment_mobile', "+968 76944041");
 
-    return sendWhatsAppMessage(phone, {
-        type: "image",
-        image: {
-            link: ensureAbsoluteUrl(paymentQrUrl),
-            caption: "💳 *Step 1: Transfer Funds*\n\n" +
-                `*Mobile Transfer : ${paymentMobile}*\n\n` +
-                "📸 *Step 2: Upload Receipt*\n\n" +
-                "Please share a photo or PDF of your payment to confirm your ticket"
-        }
-    });
+    const caption = "💳 *Step 1: Transfer Funds*\n\n" +
+        `*Mobile Transfer : ${paymentMobile}*\n\n` +
+        "📸 *Step 2: Upload Receipt*\n\n" +
+        "Please share a photo or PDF of your payment to confirm your ticket";
+
+    try {
+        return await sendWhatsAppMessage(phone, {
+            type: "image",
+            image: {
+                link: ensureAbsoluteUrl(paymentQrUrl),
+                caption: caption
+            }
+        });
+    } catch (e) {
+        console.error("❌ Failed to send QR image, falling back to text:", e.message);
+        return sendText(phone, caption);
+    }
 }
 
 async function sendMNRestrictedCategoryInfo(phone, text) {
