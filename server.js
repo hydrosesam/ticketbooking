@@ -433,6 +433,11 @@ app.get('/dashboard', requireAuth, async (req, res) => {
             });
         };
 
+        const formatSerial = (no) => {
+            if (!no) return '-';
+            return 'MMN-' + String(no).padStart(4, '0');
+        };
+
         const admin = req.admin;
         const isAdmin = admin.role === 'admin';
 
@@ -454,7 +459,7 @@ app.get('/dashboard', requireAuth, async (req, res) => {
             if (b.bank_transaction_id) {
                 const tid = b.bank_transaction_id.toUpperCase();
                 if (!txIdMap[tid]) txIdMap[tid] = [];
-                txIdMap[tid].push(b.booking_no);
+                txIdMap[tid].push(formatSerial(b.booking_no));
             }
         });
 
@@ -716,7 +721,7 @@ app.get('/dashboard', requireAuth, async (req, res) => {
 
             return `
                                 <tr>
-                                    <td><strong>${b.booking_no}</strong></td>
+                                    <td><strong>${formatSerial(b.booking_no)}</strong></td>
                                     <td style="font-size:12px; color:#64748b;">${formatOmanTime(b.timestamp)}</td>
                                     <td>
                                         <div style="font-weight:700;">${b.phone}</div>
@@ -848,7 +853,7 @@ app.get('/dashboard', requireAuth, async (req, res) => {
 
             return `
                                 <tr id="row-${b.booking_no}">
-                                    <td><strong>${b.booking_no}</strong></td>
+                                    <td><strong>${formatSerial(b.booking_no)}</strong></td>
                                     <td style="font-size:12px; color:#64748b;">${formatOmanTime(b.timestamp)}</td>
                                     <td>
                                         <div style="font-weight:700;">${b.phone}</div>
@@ -890,7 +895,7 @@ app.get('/dashboard', requireAuth, async (req, res) => {
                             <tbody>
                                 ${approvedRows.map(b => `
                                 <tr>
-                                    <td><strong>${b.booking_no}</strong></td>
+                                    <td><strong>${formatSerial(b.booking_no)}</strong></td>
                                     <td style="font-size:12px; color:#64748b;">${formatOmanTime(b.timestamp)}</td>
                                     <td>
                                         <div style="font-weight:700;">${b.phone}</div>
@@ -946,7 +951,7 @@ app.get('/dashboard', requireAuth, async (req, res) => {
                             <tbody>
                                 ${bookingRows.map(b => `
                                 <tr>
-                                    <td><strong>${b.booking_no}</strong></td>
+                                    <td><strong>${formatSerial(b.booking_no)}</strong></td>
                                     <td style="font-size:12px; color:#64748b;">${formatOmanTime(b.timestamp)}</td>
                                     <td>${b.phone}</td>
                                     <td>${b.category}</td>
@@ -994,7 +999,7 @@ app.get('/dashboard', requireAuth, async (req, res) => {
                             <tbody>
                                 ${verifiedRows.map(v => `
                                 <tr>
-                                    <td><strong>${v.booking_no}</strong></td>
+                                    <td><strong>${formatSerial(v.booking_no)}</strong></td>
                                     <td style="font-size:12px; color:#64748b;">${formatOmanTime(v.timestamp)}</td>
                                     <td>${v.category}</td>
                                     <td>${v.quantity}</td>
@@ -1277,7 +1282,7 @@ app.get('/dashboard', requireAuth, async (req, res) => {
                 document.getElementById('res-details').style.display = 'block';
                 document.getElementById('res-error').style.display = 'none';
                 document.getElementById('btn-err-close').style.display = 'none';
-                document.getElementById('res-bno').innerText = data.ticket.booking_no;
+                document.getElementById('res-bno').innerText = 'MMN-' + String(data.ticket.booking_no).padStart(4, '0');
                 document.getElementById('res-cat').innerText = data.ticket.category;
                 document.getElementById('res-qty').innerText = data.ticket.quantity;
 
