@@ -13,7 +13,7 @@ const dbConfig = process.env.MYSQL_URL || process.env.DATABASE_URL || {
     connectionLimit: 10,
     queueLimit: 0,
     charset: 'utf8mb4',
-    connectTimeout: 10000,
+    connectTimeout: 20000,
     enableKeepAlive: true,
     keepAliveInitialDelay: 10000
 };
@@ -23,6 +23,8 @@ const pool = mysql.createPool(dbConfig);
 async function initDatabase() {
     try {
         const connection = await pool.getConnection();
+        const hostInfo = typeof dbConfig === 'string' ? dbConfig.split('@')[1] : `${dbConfig.host}:${dbConfig.port}`;
+        console.log(`📡 Attempting to connect to: ${hostInfo}`);
         console.log('✅ Connected to MySQL database successfully.');
 
         // 1. Create mn_users table for state management
