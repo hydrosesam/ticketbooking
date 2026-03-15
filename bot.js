@@ -4,8 +4,8 @@ const path = require('path');
 const db = require('./database');
 const { generateTicketPDF, generateQRCode } = require('./pdf_generator');
 
-const WHATSAPP_ACCESS_TOKEN = process.env.WHATSAPP_ACCESS_TOKEN || 'EAAdPlcYFproBQLR1YAW2X176hNT7bHwfKIWhZCBlbH5b3BChXhah9gViOQLZBwycsCuSUuqN8gzJZA9vZBBCcRZBXZBdZCk8zHwuIsLnuS3k5HFnqSPeIZCZC0kSBWGTNisu6DLYWZA8LjIuAfnBkU5E9aQiQJVczG3naqaCi1siCPTj8UBENXZBNmEptcw4yupBUtFyQZDZD';
-const PHONE_NUMBER_ID = process.env.WHATSAPP_PHONE_NUMBER_ID || '658261390699917';
+const WHATSAPP_ACCESS_TOKEN = process.env.WHATSAPP_ACCESS_TOKEN || 'EAFx7YQeTUagBQ4y6EMq2oCVqUQZBy9MlmaMa2eYJsUk6TCMU533Q9S0kwOHxYsNcmZA352X9meGohb6dFKZBCUHuuwP4vYV6KOZBoEBc2jdfiSDjl0Su0sx8qahK6hgOiglBFTe2bZBZCQZAEf4LfVxS60mUEOoF31D4ZAvFuax1KH2WAqx2gTWgNTVgoIw5PpZCBlAZDZD';
+const PHONE_NUMBER_ID = process.env.WHATSAPP_PHONE_NUMBER_ID || '1065236600002252';
 const BASE_URL = process.env.PUBLIC_URL || 'https://eventz.cloud';
 
 function ensureAbsoluteUrl(url) {
