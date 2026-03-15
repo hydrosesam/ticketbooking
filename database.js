@@ -44,7 +44,7 @@ async function initDatabase() {
         // 2. Create mn_bookings table
         await connection.query(`
             CREATE TABLE IF NOT EXISTS mn_bookings (
-                booking_no VARCHAR(20) PRIMARY KEY,
+                booking_no INT AUTO_INCREMENT PRIMARY KEY,
                 ticket_id VARCHAR(50) UNIQUE NOT NULL,
                 phone VARCHAR(20) NOT NULL,
                 category VARCHAR(20) NOT NULL,
@@ -109,8 +109,7 @@ async function initDatabase() {
             ('GUEST', 20, 0),
             ('VVIP', 50, 0),
             ('VIP', 100, 0),
-            ('GOLD', 200, 0),
-            ('SILVER', 300, 0)
+            ('GOLD', 200, 0)
         `);
         console.log('✅ Synchronized inventory starting counts.');
 

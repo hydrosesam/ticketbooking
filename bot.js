@@ -336,7 +336,7 @@ async function notifyAdminsOfPayment(bookingNo, customerPhone, category, quantit
         if (admins.length === 0) return;
 
         const message = `🚨 *NEW PAYMENT SLIP*\n\n` +
-            `• *Booking:* ${bookingNo}\n` +
+            `• *Booking:* MMN-${bookingNo.toString().padStart(4, '0')}\n` +
             `• *Customer:* ${customerPhone}\n` +
             `• *Tier:* ${category}\n` +
             `• *Qty:* ${quantity}\n` +
@@ -666,26 +666,23 @@ async function handleMusicNightFlow(phone, event) {
 
 async function processPendingBooking(phone, user, slipUrl, ocrData = null) {
     try {
-        // Generate a strict 12-character alphanumeric Ticket ID
+        // Generate a strict 12-character alphanumeric Ticket ID for internal tracking/verification
         let ticketId = '';
         const chars = 'ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789';
         for (let i = 0; i < 12; i++) {
             ticketId += chars.charAt(Math.floor(Math.random() * chars.length));
         }
 
-        // Use a more unique Booking No (B + Random 8 chars)
-        const bookingNo = 'B-' + Math.random().toString(36).substring(2, 10).toUpperCase();
-
         const price = getCategoryPrice(user.category);
         const totalAmount = price * user.quantity;
 
         // Save booking to MySQL database as PENDING
-        console.log(`[DB] Inserting pending booking ${bookingNo} for ${phone}`);
-        await db.query(
-            `INSERT INTO mn_bookings (booking_no, ticket_id, phone, category, quantity, amount, members, payment_status, payment_slip_url, bank_transaction_id, bank_amount, bank_datetime, bank_beneficiary, bank_mobile) 
-             VALUES (?, ?, ?, ?, ?, ?, ?, 'pending', ?, ?, ?, ?, ?, ?)`,
+        console.log(`[DB] Inserting pending booking for ${phone}`);
+        const result = await db.query(
+            `INSERT INTO mn_bookings (ticket_id, phone, category, quantity, amount, members, payment_status, payment_slip_url, bank_transaction_id, bank_amount, bank_datetime, bank_beneficiary, bank_mobile) 
+             VALUES (?, ?, ?, ?, ?, ?, 'pending', ?, ?, ?, ?, ?, ?)`,
             [
-                bookingNo, ticketId, phone, user.category, user.quantity, totalAmount, JSON.stringify(user.members),
+                ticketId, phone, user.category, user.quantity, totalAmount, JSON.stringify(user.members),
                 slipUrl,
                 (ocrData ? ocrData.transactionId : null),
                 (ocrData ? ocrData.amount : null),
@@ -695,6 +692,9 @@ async function processPendingBooking(phone, user, slipUrl, ocrData = null) {
             ]
         );
 
+        const bookingNo = result.insertId;
+        const formattedBookingNo = `MMN-${bookingNo.toString().padStart(4, '0')}`;
+
         // Deduct from inventory (Pre-reserve)
         console.log(`[DB] Updating inventory for ${user.category} (-${user.quantity})`);
         await db.query(
@@ -702,7 +702,7 @@ async function processPendingBooking(phone, user, slipUrl, ocrData = null) {
             [user.quantity, user.category]
         );
 
-        await sendText(phone, "📥 *Payment Received!*\n\nOur staff will verify your payment slip shortly. Once authorized, your official PDF ticket will be sent to you automatically. Thank you!");
+        await sendText(phone, `📥 *Payment Received!*\n\nOur staff will verify your payment slip shortly. Once authorized, your official PDF ticket (*${formattedBookingNo}*) will be sent to you automatically. Thank you!`);
 
         // --- NOTIFY ADMINS ---
         await notifyAdminsOfPayment(bookingNo, phone, user.category, user.quantity, totalAmount, slipUrl);
@@ -731,8 +731,9 @@ async function authorizeAndSendTicket(bookingNo) {
         // Update status
         await db.query("UPDATE mn_bookings SET payment_status = 'approved' WHERE booking_no = ?", [bookingNo]);
 
+        const formattedBookingNo = `MMN-${b.booking_no.toString().padStart(4, '0')}`;
         const bookingData = {
-            bookingNo: b.booking_no,
+            bookingNo: b.booking_no, // Integer
             ticketId: b.ticket_id,
             category: b.category,
             quantity: b.quantity,
@@ -753,7 +754,7 @@ async function authorizeAndSendTicket(bookingNo) {
         console.log(`[AUTH] Uploading PDF to Meta for ${bookingNo}...`);
         const form = new (require('form-data'))();
         form.append('file', fs.createReadStream(filePath), {
-            filename: `Ticket No- ${b.booking_no}.pdf`,
+            filename: `Ticket No- ${formattedBookingNo}.pdf`,
             contentType: 'application/pdf'
         });
         form.append('messaging_product', 'whatsapp');
@@ -773,8 +774,8 @@ async function authorizeAndSendTicket(bookingNo) {
             type: "document",
             document: {
                 id: mediaId,
-                filename: `Ticket No- ${b.booking_no}.pdf`,
-                caption: `🎉 YOUR TICKET IS HERE!\n\nBooking No: ${b.booking_no}\nSee you at Muscat Star Night 2026! 🎶`
+                filename: `Ticket No- ${formattedBookingNo}.pdf`,
+                caption: `🎉 YOUR TICKET IS HERE!\n\nBooking No: ${formattedBookingNo}\nSee you at Muscat Star Night 2026! 🎶`
             }
         });
 
