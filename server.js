@@ -1432,17 +1432,17 @@ app.get('/dashboard', requireAuth, async (req, res) => {
                 
                 const tiers = ['GUEST', 'VVIP', 'VIP'];
                 tiers.forEach(tier => {
-                    const body = document.getElementById(`leads-${ tier.toLowerCase() } -body`);
+                    const body = document.getElementById(`leads-\${ tier.toLowerCase() } -body`);
                     if (!body) return;
                     
                     const filtered = enquiries.filter(e => e.category === tier);
                     body.innerHTML = filtered.map(e => `
             < tr >
-                            <td>${new Date(e.timestamp).toLocaleString('en-GB')}</td>
-                            <td><strong>${e.phone}</strong></td>
-                            <td><span class="badge ${e.status.toLowerCase() === 'new' ? 'pending' : 'scanned'}">${e.status}</span></td>
+                            <td>\${new Date(e.timestamp).toLocaleString('en-GB')}</td>
+                            <td><strong>\${e.phone}</strong></td>
+                            <td><span class="badge \${e.status.toLowerCase() === 'new' ? 'pending' : 'scanned'}">\${e.status}</span></td>
                             <td>
-                                <button class="btn-view" onclick="openChat('${e.phone}', '${e.phone}')">Open Chat</button>
+                                <button class="btn-view" onclick="openChat('\${e.phone}', '\${e.phone}')">Open Chat</button>
                             </td>
                         </tr >
             `).join('') || '<tr><td colspan="4" style="text-align:center; padding:20px;">No leads found</td></tr>';
