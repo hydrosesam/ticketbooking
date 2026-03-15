@@ -642,20 +642,20 @@ app.get('/dashboard', requireAuth, async (req, res) => {
                 <h2>EVENTZ CLOUD</h2>
             </div>
             <div class="nav">
-                ' + (isAdmin ? '
-                <div class="nav-item active" onclick="showTab(\'overview\', this)">📊 Overview</div>
-                <div class="nav-item" onclick="showTab(\'inbox\', this)">💬 Inbox</div>
-                <div class="nav-item" onclick="showTab(\'leads-guest\', this)">🌟 Guest Leads</div>
-                <div class="nav-item" onclick="showTab(\'leads-vvip\', this)">💎 VVIP Leads</div>
-                <div class="nav-item" onclick="showTab(\'leads-vip\', this)">🎟 VIP Leads</div>
-                <div class="nav-item" onclick="showTab(\'pending\', this)">🕒 Pending</div>
-                <div class="nav-item" onclick="showTab(\'approved\', this)">✅ Approved</div>
-                <div class="nav-item" onclick="showTab(\'balance\', this)">💰 Balance</div>
-                <div class="nav-item" onclick="showTab(\'admins\', this)">👥 Staff Access</div>
-                <div class="nav-item" onclick="showTab(\'settings\', this)">⚙️ Settings</div>
-                ' : '') + '
-                <div class="nav-item ' + (!isAdmin ? 'active' : '') + '" onclick="showTab(\'scanner\', this)">🔍 Ticket Scanner</div>
-                <div class="nav-item" onclick="showTab(\'history\', this)">🏁 Verified List</div>
+                ${isAdmin ? `
+                <div class="nav-item active" onclick="showTab('overview', this)">📊 Overview</div>
+                <div class="nav-item" onclick="showTab('inbox', this)">💬 Inbox</div>
+                <div class="nav-item" onclick="showTab('leads-guest', this)">🌟 Guest Leads</div>
+                <div class="nav-item" onclick="showTab('leads-vvip', this)">💎 VVIP Leads</div>
+                <div class="nav-item" onclick="showTab('leads-vip', this)">🎟 VIP Leads</div>
+                <div class="nav-item" onclick="showTab('pending', this)">🕒 Pending</div>
+                <div class="nav-item" onclick="showTab('approved', this)">✅ Approved</div>
+                <div class="nav-item" onclick="showTab('balance', this)">💰 Balance</div>
+                <div class="nav-item" onclick="showTab('admins', this)">👥 Staff Access</div>
+                <div class="nav-item" onclick="showTab('settings', this)">⚙️ Settings</div>
+                ` : ''}
+                <div class="nav-item ${!isAdmin ? 'active' : ''}" onclick="showTab('scanner', this)">🔍 Ticket Scanner</div>
+                <div class="nav-item" onclick="showTab('history', this)">🏁 Verified List</div>
             </div>
             <div class="logout-area">
                 <button class="btn-logout" onclick="location.href='/logout'">LOGOUT</button>
@@ -1008,7 +1008,7 @@ app.get('/dashboard', requireAuth, async (req, res) => {
                 </div>
             </div>
 
-            ' + (isAdmin ? '
+            ${isAdmin ? `
             <!-- ADMINS SECTION -->
             <div id="admins" class="section">
                 <div style="margin-bottom: 30px; display:flex; justify-content:space-between; align-items:center;">
@@ -1016,7 +1016,7 @@ app.get('/dashboard', requireAuth, async (req, res) => {
                         <h1 style="margin:0; font-size:28px; font-weight:800;">Admin Management</h1>
                         <p style="color:#64748b;">Manage staff access and notifications</p>
                     </div>
-                    <button class="btn-action btn-approve" onclick="document.getElementById(\'add-admin-modal\').style.display=\'flex\'">+ Add Staff</button>
+                    <button class="btn-action btn-approve" onclick="document.getElementById('add-admin-modal').style.display='flex'">+ Add Staff</button>
                 </div>
 
                 <div class="card-table">
@@ -1027,15 +1027,15 @@ app.get('/dashboard', requireAuth, async (req, res) => {
                                 <tr><th>Name</th><th>WhatsApp Number</th><th>Role</th><th>Action</th></tr>
                             </thead>
                             <tbody>
-                                ' + adminRows.map(a => '
+                                ${adminRows.map(a => `
                                 <tr>
-                                    <td><strong>' + a.name + '</strong></td>
-                                    <td>' + a.phone + '</td>
-                                    <td><span class="badge ' + (a.role === "admin" ? "paid" : "unused") + '">' + a.role + '</span></td>
+                                    <td><strong>${a.name}</strong></td>
+                                    <td>${a.phone}</td>
+                                    <td><span class="badge ${a.role === 'admin' ? 'paid' : 'unused'}">${a.role}</span></td>
                                     <td>
-                                        <button onclick="deleteAdmin(\'' + a.phone + '\')" class="btn-action" style="background:var(--danger); color:white;">Remove</button>
+                                        <button onclick="deleteAdmin('${a.phone}')" class="btn-action" style="background:var(--danger); color:white;">Remove</button>
                                     </td>
-                                </tr>').join('') + '
+                                </tr>`).join('')}
                             </tbody>
                         </table>
                 </div>
@@ -1058,7 +1058,7 @@ app.get('/dashboard', requireAuth, async (req, res) => {
                                 <input type="text" id="setting-qr-url" class="edit-input" style="flex:1; text-align:left; padding:15px; font-weight:normal;" placeholder="https://...">
                                 <span style="color:#64748b; font-weight:700;">OR</span>
                                 <input type="file" id="qr-upload-input" accept="image/*" style="display:none;" onchange="handleQRUpload(this)">
-                                <button class="btn-action" style="background:#f1f5f9; color:var(--primary); padding:15px 25px;" onclick="document.getElementById(\'qr-upload-input\').click()">📁 Upload Image</button>
+                                <button class="btn-action" style="background:#f1f5f9; color:var(--primary); padding:15px 25px;" onclick="document.getElementById('qr-upload-input').click()">📁 Upload Image</button>
                             </div>
                             <p style="font-size:12px; color:#64748b; margin-top:5px;">Public URL OR upload a new image directly.</p>
                         </div>
@@ -1071,7 +1071,7 @@ app.get('/dashboard', requireAuth, async (req, res) => {
                     </div>
                 </div>
             </div>
-            ' : '') + '
+            ` : ''}
         </div>
     </div>
 
@@ -1441,10 +1441,9 @@ app.get('/dashboard', requireAuth, async (req, res) => {
                     if (conv.phone === activeChatPhone) el.classList.add('active');
                     
                     var time = new Date(conv.timestamp).toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'});
-                    var preview = conv.message_type === 'text' ? conv.content : '[' + conv.message_type + ']';
+                    var preview = conv.message_type === 'text' ? (conv.content || '') : '[' + conv.message_type + ']';
                     var unread = parseInt(conv.unread_count || 0);
                     
-                    // Try to extract name if temp_members exists
                     var nameDisplay = conv.phone;
                     try {
                         if (conv.temp_members) {
@@ -1454,10 +1453,11 @@ app.get('/dashboard', requireAuth, async (req, res) => {
                     } catch(e) {}
 
                     var badgeHtml = unread > 0 ? '<span class="unread-badge">' + unread + '</span>' : '';
-                    el.innerHTML = '<span class="conversation-time">' + time + '</span>' +
-                                   '<div class="conversation-phone">' + nameDisplay + badgeHtml + '</div>' +
-                                   '<div class="conversation-preview">' + preview + '</div>';
-                                   
+                    var contentHtml = '<span class="conversation-time">' + time + '</span>' +
+                                     '<div class="conversation-phone">' + nameDisplay + badgeHtml + '</div>' +
+                                     '<div class="conversation-preview">' + preview + '</div>';
+                    
+                    el.innerHTML = contentHtml;
                     el.onclick = function() { openChat(conv.phone, nameDisplay); };
                     list.appendChild(el);
                 });
@@ -1485,16 +1485,18 @@ app.get('/dashboard', requireAuth, async (req, res) => {
                     if (!body) return;
                     
                     const filtered = enquiries.filter(e => e.category === tier);
-                    body.innerHTML = filtered.map(e => 
-                        '<tr>' +
-                            '<td>' + new Date(e.timestamp).toLocaleString('en-GB') + '</td>' +
-                            '<td><strong>' + e.phone + '</strong></td>' +
-                            '<td><span class="badge ' + (e.status.toLowerCase() === 'new' ? 'pending' : 'scanned') + '">' + e.status + '</span></td>' +
-                            '<td>' +
-                                '<button class="btn-view" onclick="openChat(\'' + e.phone + '\', \'' + e.phone + '\')">Open Chat</button>' +
-                            '</td>' +
-                        '</tr>'
-                    ).join('') || '<tr><td colspan="4" style="text-align:center; padding:20px;">No leads found</td></tr>';
+                    body.innerHTML = filtered.map(function(e) {
+                         var date = new Date(e.timestamp).toLocaleString('en-GB');
+                         var badgeClass = (e.status && e.status.toLowerCase() === 'new') ? 'pending' : 'scanned';
+                         return '<tr>' +
+                             '<td>' + date + '</td>' +
+                             '<td><strong>' + e.phone + '</strong></td>' +
+                             '<td><span class="badge ' + badgeClass + '">' + e.status + '</span></td>' +
+                             '<td>' +
+                                 '<button class="btn-view" onclick="openChat(\'' + e.phone + '\', \'' + e.phone + '\')">Open Chat</button>' +
+                             '</td>' +
+                         '</tr>';
+                    }).join('') || '<tr><td colspan="4" style="text-align:center; padding:20px;">No leads found</td></tr>';
                 });
             } catch (e) {
                 console.error("Failed to load enquiries", e);
