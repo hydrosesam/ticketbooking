@@ -543,6 +543,11 @@ async function handleMusicNightFlow(phone, event) {
             await sendMNMemberNameRequest(phone);
             await saveUserState(phone, "MN_MEMBER_NAME");
         } else if (currentState === "MN_PAYMENT_UPLOAD") {
+            // Remove from abandoned carts if they go back from payment step
+            try {
+                await db.query("DELETE FROM mn_abandoned_carts WHERE phone = ?", [phone]);
+            } catch (err) { console.error("❌ Failed to remove abandoned cart on back:", err.message); }
+            
             await showMNBookingSummary(phone, { category: user.category, quantity: user.quantity, members: user.members });
             await saveUserState(phone, "MN_CONFIRM_AWAIT");
         }
@@ -721,6 +726,21 @@ async function handleMusicNightFlow(phone, event) {
 
         case "MN_CONFIRM_AWAIT":
             if (message === "MN_PROC_PAYMENT") {
+                // Log to abandoned carts before showing payment QR
+                try {
+                    const price = getCategoryPrice(user.category);
+                    const total = price * user.quantity;
+                    const name = (user.members && user.members.length > 0) ? user.members[0] : "Customer";
+                    
+                    // Use REPLACE to avoid duplicates if they click multiple times
+                    await db.query(
+                        "REPLACE INTO mn_abandoned_carts (phone, name, category, quantity, amount) VALUES (?, ?, ?, ?, ?)",
+                        [phone, name, user.category, user.quantity, total]
+                    );
+                } catch (err) {
+                    console.error("❌ Failed to log abandoned cart:", err.message);
+                }
+
                 await sendMNPaymentRequest(phone);
                 await saveUserState(phone, "MN_PAYMENT_UPLOAD");
             } else if (message === "CANCEL_MN_BOOKING") {
@@ -785,6 +805,11 @@ async function processPendingBooking(phone, user, slipUrl, ocrData = null) {
             "UPDATE mn_users SET state = 'MN_MAIN', temp_category = NULL, temp_quantity = NULL, temp_members = NULL, temp_slip_url = NULL WHERE phone_number = ?",
             [phone]
         );
+
+        // Remove from abandoned carts now that they've COMPLETED the upload
+        try {
+            await db.query("DELETE FROM mn_abandoned_carts WHERE phone = ?", [phone]);
+        } catch (err) { console.error("❌ Failed to remove converted cart:", err.message); }
 
     } catch (err) {
         console.error("❌ [MN] Pending booking failed:", err);

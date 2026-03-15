@@ -190,6 +190,20 @@ async function initDatabase() {
         `);
         console.log('✅ Checked/Created table: mn_enquiries');
 
+        // 9. Create mn_abandoned_carts table
+        await connection.query(`
+            CREATE TABLE IF NOT EXISTS mn_abandoned_carts (
+                id INT AUTO_INCREMENT PRIMARY KEY,
+                phone VARCHAR(20) NOT NULL UNIQUE,
+                name VARCHAR(100) DEFAULT NULL,
+                category VARCHAR(20) NOT NULL,
+                quantity INT NOT NULL,
+                amount DECIMAL(10,2) NOT NULL,
+                timestamp TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+            )
+        `);
+        console.log('✅ Checked/Created table: mn_abandoned_carts');
+
         connection.release();
     } catch (err) {
         console.error('❌ Failed to initialize database:', err.message);

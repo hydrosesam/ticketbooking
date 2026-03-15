@@ -310,6 +310,15 @@ app.get('/admin/enquiries', requireAuth, async (req, res) => {
     }
 });
 
+app.get('/admin/abandoned', requireAuth, async (req, res) => {
+    try {
+        const rows = await db.query("SELECT * FROM mn_abandoned_carts ORDER BY timestamp DESC");
+        res.json(rows);
+    } catch (err) {
+        res.status(500).json({ error: err.message });
+    }
+});
+
 app.post('/admin/settings/upload-qr', requireAuth, upload.single('qr_image'), async (req, res) => {
     if (!req.file) return res.status(400).json({ error: "No file uploaded" });
     const fileUrl = `/uploads/${req.file.filename}`;
@@ -650,6 +659,7 @@ app.get('/dashboard', requireAuth, async (req, res) => {
                 ${isAdmin ? `
                 <div class="nav-item active" onclick="showTab('overview', this)">📊 Overview</div>
                 <div class="nav-item" onclick="showTab('inbox', this)">💬 Inbox</div>
+                <div class="nav-item" onclick="showTab('abandoned', this)">🛒 Abandoned</div>
                 <div class="nav-item" onclick="showTab('leads-guest', this)">🌟 Guest Leads</div>
                 <div class="nav-item" onclick="showTab('leads-vvip', this)">💎 VVIP Leads</div>
                 <div class="nav-item" onclick="showTab('leads-vip', this)">🎟 VIP Leads</div>
@@ -830,6 +840,23 @@ app.get('/dashboard', requireAuth, async (req, res) => {
                             </thead>
                             <tbody id="leads-vip-body">
                                 <tr><td colspan="4" style="text-align:center; padding:20px;">Loading VIP leads...</td></tr>
+                            </tbody>
+                        </table>
+                    </div>
+                </div>
+            </div>
+
+            <!-- ABANDONED SECTION -->
+            <div id="abandoned" class="section">
+                <div class="card-table">
+                    <div class="table-header"><h2>Abandoned Carts (Awaiting Payment)</h2></div>
+                    <div class="table-wrap">
+                        <table>
+                            <thead>
+                                <tr><th>Timestamp</th><th>Customer</th><th>Category</th><th>Qty</th><th>Amount</th><th>Action</th></tr>
+                            </thead>
+                            <tbody id="abandoned-body">
+                                <tr><td colspan="6" style="text-align:center; padding:20px;">Loading abandoned carts...</td></tr>
                             </tbody>
                         </table>
                     </div>
@@ -1114,6 +1141,7 @@ app.get('/dashboard', requireAuth, async (req, res) => {
             if (el) el.classList.add('active');
             if (id !== 'scanner') stopScanner();
             if (id === 'inbox') loadConversations(); // Automatically load inbox data
+            if (id === 'abandoned') loadAbandonedCarts();
             if (window.innerWidth < 900) toggleMenu();
         }
 
@@ -1506,9 +1534,36 @@ app.get('/dashboard', requireAuth, async (req, res) => {
             }
         }
 
+        async function loadAbandonedCarts() {
+            try {
+                const res = await fetch('/admin/abandoned');
+                const carts = await res.json();
+                const body = document.getElementById('abandoned-body');
+                if (!body) return;
+                
+                body.innerHTML = carts.map(function(c) {
+                    var date = new Date(c.timestamp).toLocaleString('en-GB');
+                    return '<tr>' +
+                        '<td>' + date + '</td>' +
+                        '<td><strong>' + c.name + '</strong><br><span style="font-size:12px;color:#64748b;">' + c.phone + '</span></td>' +
+                        '<td>' + c.category + '</td>' +
+                        '<td>' + c.quantity + '</td>' +
+                        '<td>OMR ' + parseFloat(c.amount).toFixed(2) + '</td>' +
+                        '<td>' +
+                            '<button class="btn-view" onclick="openChat(\\\'' + c.phone + '\\\', \\\'' + c.name + ' (\\\' + c.phone + \\\')\\\')">Message</button>' +
+                        '</td>' +
+                    '</tr>';
+                }).join('') || '<tr><td colspan="6" style="text-align:center; padding:20px;">No abandoned carts yet.</td></tr>';
+            } catch (e) {
+                console.error("Failed to load abandoned carts", e);
+            }
+        }
+
         // Periodic refresh for leads
         setInterval(loadEnquiries, 30000); // 30s
+        setInterval(loadAbandonedCarts, 30000); // Also refresh abandoned
         loadEnquiries();
+        loadAbandonedCarts();
 
         async function openChat(phone, nameDisplay) {
             activeChatPhone = phone;
