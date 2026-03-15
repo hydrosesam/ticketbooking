@@ -127,17 +127,17 @@ async function sendMNWelcome(phone) {
 async function sendMNCategorySelect(phone) {
     const imageUrl = "https://lh3.googleusercontent.com/d/1avxu1WWjRb6BiBQvWZjnrbIZYrT8o10Q";
 
-    // 1. Try sending seating layout image (with failover)
+    // 1. First Send seating layout image (with failover)
     try {
         await sendWhatsAppMessage(phone, {
             type: "image",
-            image: { link: imageUrl, caption: "🎫 View the seating layout above to choose your category." }
+            image: { link: imageUrl }
         });
     } catch (e) {
         console.error("Layout Image failed to send:", e.message);
     }
 
-    // 2. Send the interactive list (Crucial step)
+    // 2. Then Send the interactive list
     return sendWhatsAppMessage(phone, {
         type: "interactive",
         interactive: {
@@ -196,7 +196,7 @@ async function sendMNQuantityRequest(phone, category, availableSeats) {
 }
 
 async function sendMNMemberNameRequest(phone) {
-    return sendText(phone, "👤 Kindly share your good name with us for the ticket registration (e.g. John Doe):");
+    return sendText(phone, "Kindly Share your name. 😊");
 }
 
 async function showMNBookingSummary(phone, bookingData) {
@@ -387,6 +387,24 @@ async function notifyAdminsOfPayment(bookingNo, customerPhone, category, quantit
     }
 }
 
+async function notifyAdminsOfTierInterest(customerPhone, category) {
+    try {
+        const admins = await db.query("SELECT phone FROM mn_admins WHERE is_active = TRUE");
+        if (admins.length === 0) return;
+
+        const message = `🎫 *TIER INTEREST ALERT*\n\n` +
+            `• *Customer:* ${customerPhone}\n` +
+            `• *Interest In:* ${category}\n\n` +
+            `The user has been told that the ticketing team will contact them. Please follow up manually.`;
+
+        for (const admin of admins) {
+            await sendText(admin.phone, message);
+        }
+    } catch (err) {
+        console.error("❌ Error notifying admins of interest:", err);
+    }
+}
+
 async function handleMusicNightFlow(phone, event) {
     const user = await getUserState(phone);
     const currentState = user.state;
@@ -533,40 +551,43 @@ async function handleMusicNightFlow(phone, event) {
 
                 // --- CATEGORY RESTRICTION ---
                 if (category === "GUEST") {
-                    let guestTxt = `*Muscat Star Night 2026*\n\n` +
-                        `🎫 Category: Guest\n` +
-                        `💺 Guest Ticket: 50 OMR\n` +
-                        `🛋 Seating: Sofa Seating\n` +
-                        `📍 Rows: 2nd & 3rd Row\n` +
-                        `📅 10 April 2026 | 🕓 4:00 PM\n` +
+                    let guestTxt = `Muscat Star Night 2026\n\n` +
+                        `🎫 Category: *Guest*\n` +
+                        `💺 Guest Ticket: *50 OMR*\n` +
+                        `🛋 Seating: *Sofa Seating*\n` +
+                        `📍 Rows: *2nd & 3rd Row*\n` +
+                        `📅 10 April 2026 | 🕓 *5:00 PM*\n` +
+                        `🚪 Gate Open : *3:00 PM*\n` +
                         `📍 Muscat Club, Al Wadi Kabir\n\n\n` +
-                        `📞 For Tickets, Contact Us:\n` +
-                        `+968 95950347 , +968 90447172`;
+                        `🎫 *Thank you! Our ticketing team will contact you .*`;
                     await sendMNRestrictedCategoryInfo(phone, guestTxt);
+                    await notifyAdminsOfTierInterest(phone, "GUEST");
                     return;
                 }
 
                 if (category === "VVIP") {
                     let vvipTxt = `*Muscat Star Night 2026*\n\n` +
-                        `🎫 Category: VVIP\n` +
-                        `💺 VVIP Ticket: 20 OMR\n` +
-                        `📅 10 April 2026 | 🕓 4:00 PM\n` +
+                        `🎫 Category: *VVIP*\n` +
+                        `💺 VVIP Ticket: *20 OMR*\n` +
+                        `📅 10 April 2026 | 🕓 *4:00 PM*\n` +
+                        `🚪 Gate Open : *3:00 PM*\n` +
                         `📍 Muscat Club, Al Wadi Kabir\n\n\n` +
-                        `📞 For Tickets, Contact Us:\n` +
-                        `+968 95950347 , +968 90447172`;
+                        `🎫 *Thank you! Our ticketing team will contact you shortly.*`;
                     await sendMNRestrictedCategoryInfo(phone, vvipTxt);
+                    await notifyAdminsOfTierInterest(phone, "VVIP");
                     return;
                 }
 
                 if (category === "VIP") {
-                    let vipTxt = `Muscat Star Night 2026\n\n` +
-                        `🎫 Category: VIP\n` +
-                        `💺 VIP Ticket: 10 OMR\n` +
-                        `📅 10 April 2026 | 🕓 4:00 PM\n` +
+                    let vipTxt = `*Muscat Star Night 2026*\n\n` +
+                        `🎫 Category: *VIP*\n` +
+                        `💺 VIP Ticket: *10 OMR*\n` +
+                        `📅 10 April 2026 | 🕓 *4:00 PM*\n` +
+                        `🚪 Gate Open : *3:00 PM*\n` +
                         `📍 Muscat Club, Al Wadi Kabir\n\n\n` +
-                        `📞 For Tickets, Contact Us:\n` +
-                        `+968 95950347 , +968 90447172`;
+                        `🎫 *Thank you! Our ticketing team will contact you shortly.*`;
                     await sendMNRestrictedCategoryInfo(phone, vipTxt);
+                    await notifyAdminsOfTierInterest(phone, "VIP");
                     return;
                 }
                 // ----------------------------
