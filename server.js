@@ -319,6 +319,53 @@ app.get('/admin/abandoned', requireAuth, async (req, res) => {
     }
 });
 
+app.post('/admin/abandoned/approve', requireAuth, async (req, res) => {
+    const { phone, name, category, quantity, amount } = req.body;
+    if (!phone || !category || !quantity) return res.status(400).json({ error: "Missing data" });
+
+    try {
+        // 1. Create a dummy user state if they don't exist or just to store data for processPendingBooking
+        const user = { phone, name, category, quantity, members: [name] };
+        
+        // 2. Insert into mn_bookings directly as pending (or skip to approved?)
+        // To be safe and follow existing flow, we insert as pending then immediately authorize.
+        
+        // Use a generated ticket ID (similar to processPendingBooking logic)
+        let ticketId = '';
+        const chars = 'ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789';
+        for (let i = 0; i < 12; i++) {
+            ticketId += chars.charAt(Math.floor(Math.random() * chars.length));
+        }
+
+        const result = await db.query(
+            `INSERT INTO mn_bookings (ticket_id, phone, category, quantity, amount, members, payment_status, payment_slip_url) 
+             VALUES (?, ?, ?, ?, ?, ?, 'pending', ?)`,
+            [ticketId, phone, category, quantity, amount, JSON.stringify([name]), 'MANUAL_APPROVAL']
+        );
+
+        const bookingNo = result.insertId;
+        const formattedBookingNo = `MMN-${bookingNo.toString().padStart(4, '0')}`;
+        await db.query("UPDATE mn_bookings SET ticket_id = ? WHERE booking_no = ?", [formattedBookingNo, bookingNo]);
+
+        // Deduct inventory
+        await db.query(`UPDATE mn_inventory SET booked_seats = booked_seats + ? WHERE category = ?`, [quantity, category]);
+
+        // 3. Authorize and Send
+        const authResult = await authorizeAndSendTicket(bookingNo);
+        
+        if (authResult.success) {
+            // Remove from abandoned
+            await db.query("DELETE FROM mn_abandoned_carts WHERE phone = ?", [phone]);
+            res.json({ success: true, bookingNo: formattedBookingNo });
+        } else {
+            res.status(500).json({ error: authResult.error });
+        }
+    } catch (err) {
+        console.error("Manual approval error:", err);
+        res.status(500).json({ error: err.message });
+    }
+});
+
 app.post('/admin/settings/upload-qr', requireAuth, upload.single('qr_image'), async (req, res) => {
     if (!req.file) return res.status(400).json({ error: "No file uploaded" });
     const fileUrl = `/uploads/${req.file.filename}`;
@@ -1543,6 +1590,10 @@ app.get('/dashboard', requireAuth, async (req, res) => {
                 
                 body.innerHTML = carts.map(function(c) {
                     var date = new Date(c.timestamp).toLocaleString('en-GB');
+                    // Escape single quotes in names to prevent syntax errors in onclick
+                    var escapedName = c.name.replace(/'/g, "\\'");
+                    var nameDisplay = escapedName + ' (' + c.phone + ')';
+
                     return '<tr>' +
                         '<td>' + date + '</td>' +
                         '<td><strong>' + c.name + '</strong><br><span style="font-size:12px;color:#64748b;">' + c.phone + '</span></td>' +
@@ -1550,12 +1601,35 @@ app.get('/dashboard', requireAuth, async (req, res) => {
                         '<td>' + c.quantity + '</td>' +
                         '<td>OMR ' + parseFloat(c.amount).toFixed(2) + '</td>' +
                         '<td>' +
-                            '<button class="btn-view" onclick="openChat(\\\'' + c.phone + '\\\', \\\'' + c.name + ' (\\\' + c.phone + \\\')\\\')">Message</button>' +
+                            '<div style="display:flex; gap:8px;">' +
+                                '<button class="btn-view" onclick="openChat(\'' + c.phone + '\', \'' + nameDisplay + '\')">Message</button>' +
+                                '<button class="btn-action btn-approve" onclick="manualApproveCart(\'' + c.phone + '\', \'' + escapedName + '\', \'' + c.category + '\', ' + c.quantity + ', ' + c.amount + ')">Approve</button>' +
+                            '</div>' +
                         '</td>' +
                     '</tr>';
                 }).join('') || '<tr><td colspan="6" style="text-align:center; padding:20px;">No abandoned carts yet.</td></tr>';
             } catch (e) {
                 console.error("Failed to load abandoned carts", e);
+            }
+        }
+
+        async function manualApproveCart(phone, name, category, quantity, amount) {
+            if (!confirm('Manually approve and send ticket for ' + name + ' (' + phone + ')?')) return;
+            try {
+                const res = await fetch('/admin/abandoned/approve', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ phone, name, category, quantity, amount })
+                });
+                const data = await res.json();
+                if (data.success) {
+                    alert('Ticket generated and sent successfully!');
+                    loadAbandonedCarts();
+                } else {
+                    alert('Error: ' + data.error);
+                }
+            } catch (e) {
+                alert('Network Error');
             }
         }
 
