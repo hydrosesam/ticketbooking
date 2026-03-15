@@ -156,7 +156,8 @@ async function sendMNCategorySelect(phone) {
                             { id: "CAT_GUEST", title: "GUEST", description: "OMR 50 | Sofa Seating (2nd & 3rd Row)" },
                             { id: "CAT_VVIP", title: "VVIP", description: "OMR 20" },
                             { id: "CAT_VIP", title: "VIP", description: "OMR 10" },
-                            { id: "CAT_GOLD", title: "GOLD", description: "OMR 5" }
+                            { id: "CAT_GOLD", title: "GOLD", description: "OMR 5" },
+                            { id: "BTN_BACK", title: "⬅️ BACK", description: "Return to previous step" }
                         ]
                     }
                 ]
@@ -190,6 +191,12 @@ async function sendMNQuantityRequest(phone, category, availableSeats) {
                     {
                         title: "Available Tickets",
                         rows: rows
+                    },
+                    {
+                        title: "Navigation",
+                        rows: [
+                            { id: "BTN_BACK", title: "⬅️ BACK", description: "Return to category selection" }
+                        ]
                     }
                 ]
             }
@@ -198,7 +205,18 @@ async function sendMNQuantityRequest(phone, category, availableSeats) {
 }
 
 async function sendMNMemberNameRequest(phone) {
-    return sendText(phone, "Kindly Share your name. 😊");
+    return sendWhatsAppMessage(phone, {
+        type: "interactive",
+        interactive: {
+            type: "button",
+            body: { text: "Kindly Share your name. 😊" },
+            action: {
+                buttons: [
+                    { type: "reply", reply: { id: "BTN_BACK", title: "⬅️ BACK" } }
+                ]
+            }
+        }
+    });
 }
 
 async function showMNBookingSummary(phone, bookingData) {
@@ -225,6 +243,7 @@ async function showMNBookingSummary(phone, bookingData) {
             action: {
                 buttons: [
                     { type: "reply", reply: { id: "MN_PROC_PAYMENT", title: "Confirm & Pay" } },
+                    { type: "reply", reply: { id: "BTN_BACK", title: "⬅️ BACK" } },
                     { type: "reply", reply: { id: "CANCEL_MN_BOOKING", title: "Cancel" } }
                 ]
             }
@@ -252,16 +271,42 @@ async function sendMNPaymentRequest(phone) {
         "Please share a photo or PDF of your payment to confirm your ticket";
 
     try {
-        return await sendWhatsAppMessage(phone, {
+        // Send QR Image first
+        await sendWhatsAppMessage(phone, {
             type: "image",
             image: {
                 link: ensureAbsoluteUrl(paymentQrUrl),
                 caption: caption
             }
         });
+
+        // Then send back button
+        return sendWhatsAppMessage(phone, {
+            type: "interactive",
+            interactive: {
+                type: "button",
+                body: { text: "Need to change something? Click Back." },
+                action: {
+                    buttons: [
+                        { type: "reply", reply: { id: "BTN_BACK", title: "⬅️ BACK" } }
+                    ]
+                }
+            }
+        });
     } catch (e) {
         console.error("❌ Failed to send QR image, falling back to text:", e.message);
-        return sendText(phone, caption);
+        return sendWhatsAppMessage(phone, {
+            type: "interactive",
+            interactive: {
+                type: "button",
+                body: { text: caption },
+                action: {
+                    buttons: [
+                        { type: "reply", reply: { id: "BTN_BACK", title: "⬅️ BACK" } }
+                    ]
+                }
+            }
+        });
     }
 }
 
@@ -552,6 +597,29 @@ async function handleMusicNightFlow(phone, event) {
     if (message === "BTN_MN_BOOK_NOW") {
         await sendMNCategorySelect(phone);
         await saveUserState(phone, "MN_CATEGORY_SELECT");
+        return;
+    }
+
+    if (message === "BTN_BACK") {
+        console.log(`[FLOW] Back navigation from ${currentState}`);
+        if (currentState === "MN_CATEGORY_SELECT") {
+            await sendMNWelcome(phone);
+            await saveUserState(phone, "MN_WELCOME_WAIT");
+        } else if (currentState === "MN_QUANTITY_INPUT") {
+            await sendMNCategorySelect(phone);
+            await saveUserState(phone, "MN_CATEGORY_SELECT");
+        } else if (currentState === "MN_MEMBER_NAME") {
+            const inv = await db.query("SELECT * FROM mn_inventory WHERE category = ?", [user.category]);
+            const available = inv.length > 0 ? (inv[0].total_seats - inv[0].booked_seats) : 10;
+            await sendMNQuantityRequest(phone, user.category, available);
+            await saveUserState(phone, "MN_QUANTITY_INPUT");
+        } else if (currentState === "MN_CONFIRM_AWAIT") {
+            await sendMNMemberNameRequest(phone);
+            await saveUserState(phone, "MN_MEMBER_NAME");
+        } else if (currentState === "MN_PAYMENT_UPLOAD") {
+            await showMNBookingSummary(phone, { category: user.category, quantity: user.quantity, members: user.members });
+            await saveUserState(phone, "MN_CONFIRM_AWAIT");
+        }
         return;
     }
 
