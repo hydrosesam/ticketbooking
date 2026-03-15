@@ -1591,7 +1591,7 @@ app.get('/dashboard', requireAuth, async (req, res) => {
                 body.innerHTML = carts.map(function(c) {
                     var date = new Date(c.timestamp).toLocaleString('en-GB');
                     // Escape single quotes in names to prevent syntax errors in onclick
-                    var escapedName = c.name.replace(/'/g, "\\'");
+                    var escapedName = c.name.replace(/'/g, "\\\\'");
                     var nameDisplay = escapedName + ' (' + c.phone + ')';
 
                     return '<tr>' +
@@ -1602,8 +1602,8 @@ app.get('/dashboard', requireAuth, async (req, res) => {
                         '<td>OMR ' + parseFloat(c.amount).toFixed(2) + '</td>' +
                         '<td>' +
                             '<div style="display:flex; gap:8px;">' +
-                                '<button class="btn-view" onclick="openChat(\'' + c.phone + '\', \'' + nameDisplay + '\')">Message</button>' +
-                                '<button class="btn-action btn-approve" onclick="manualApproveCart(\'' + c.phone + '\', \'' + escapedName + '\', \'' + c.category + '\', ' + c.quantity + ', ' + c.amount + ')">Approve</button>' +
+                                '<button class="btn-view" onclick="openChat(\\\'' + c.phone + '\\\', \\\'' + nameDisplay + '\\\')">Message</button>' +
+                                '<button class="btn-action btn-approve" onclick="manualApproveCart(\\\'' + c.phone + '\\\', \\\'' + escapedName + '\\\', \\\'' + c.category + '\\\', ' + c.quantity + ', ' + c.amount + ')">Approve</button>' +
                             '</div>' +
                         '</td>' +
                     '</tr>';
