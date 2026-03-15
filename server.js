@@ -298,6 +298,18 @@ app.post('/admin/settings/update', requireAuth, async (req, res) => {
     }
 });
 
+// ======================================
+// Enquiries API Endpoints
+// ======================================
+app.get('/admin/enquiries', requireAuth, async (req, res) => {
+    try {
+        const rows = await db.query("SELECT * FROM mn_enquiries ORDER BY timestamp DESC");
+        res.json(rows);
+    } catch (err) {
+        res.status(500).json({ error: err.message });
+    }
+});
+
 app.post('/admin/settings/upload-qr', requireAuth, upload.single('qr_image'), async (req, res) => {
     if (!req.file) return res.status(400).json({ error: "No file uploaded" });
     const fileUrl = `/uploads/${req.file.filename}`;
@@ -633,6 +645,9 @@ app.get('/dashboard', requireAuth, async (req, res) => {
                 ${isAdmin ? `
                 <div class="nav-item active" onclick="showTab('overview', this)">📊 Overview</div>
                 <div class="nav-item" onclick="showTab('inbox', this)">💬 Inbox</div>
+                <div class="nav-item" onclick="showTab('leads-guest', this)">🌟 Guest Leads</div>
+                <div class="nav-item" onclick="showTab('leads-vvip', this)">💎 VVIP Leads</div>
+                <div class="nav-item" onclick="showTab('leads-vip', this)">🎟 VIP Leads</div>
                 <div class="nav-item" onclick="showTab('pending', this)">🕒 Pending</div>
                 <div class="nav-item" onclick="showTab('approved', this)">✅ Approved</div>
                 <div class="nav-item" onclick="showTab('balance', this)">💰 Balance</div>
@@ -1409,6 +1424,37 @@ app.get('/dashboard', requireAuth, async (req, res) => {
                 else el.style.display = 'none';
             });
         }
+
+        async function loadEnquiries() {
+            try {
+                const res = await fetch('/admin/enquiries');
+                const enquiries = await res.json();
+                
+                const tiers = ['GUEST', 'VVIP', 'VIP'];
+                tiers.forEach(tier => {
+                    const body = document.getElementById(`leads-${ tier.toLowerCase() } -body`);
+                    if (!body) return;
+                    
+                    const filtered = enquiries.filter(e => e.category === tier);
+                    body.innerHTML = filtered.map(e => `
+            < tr >
+                            <td>${new Date(e.timestamp).toLocaleString('en-GB')}</td>
+                            <td><strong>${e.phone}</strong></td>
+                            <td><span class="badge ${e.status.toLowerCase() === 'new' ? 'pending' : 'scanned'}">${e.status}</span></td>
+                            <td>
+                                <button class="btn-view" onclick="openChat('${e.phone}', '${e.phone}')">Open Chat</button>
+                            </td>
+                        </tr >
+            `).join('') || '<tr><td colspan="4" style="text-align:center; padding:20px;">No leads found</td></tr>';
+                });
+            } catch (e) {
+                console.error("Failed to load enquiries", e);
+            }
+        }
+
+        // Periodic refresh for leads
+        setInterval(loadEnquiries, 30000); // 30s
+        loadEnquiries();
 
         async function openChat(phone, nameDisplay) {
             activeChatPhone = phone;

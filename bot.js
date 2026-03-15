@@ -389,6 +389,9 @@ async function notifyAdminsOfPayment(bookingNo, customerPhone, category, quantit
 
 async function notifyAdminsOfTierInterest(customerPhone, category) {
     try {
+        // Save to enquiries table
+        await db.query("INSERT INTO mn_enquiries (phone, category) VALUES (?, ?)", [customerPhone, category]);
+
         const admins = await db.query("SELECT phone FROM mn_admins WHERE is_active = TRUE");
         if (admins.length === 0) return;
 
@@ -465,6 +468,12 @@ async function handleMusicNightFlow(phone, event) {
     if (currentState === "MN_PAYMENT_UPLOAD") {
         let localPath = null;
         let ocrResult = null;
+
+        // Reject other media types
+        if (event && event.type && (event.type === 'audio' || event.type === 'video' || event.type === 'voice' || event.type === 'sticker')) {
+            await sendText(phone, "⚠️ *Invalid File Type*\n\nPlease upload only a *Photo* or *PDF* of your payment slip. Audio, video, and stickers are not accepted.");
+            return;
+        }
 
         // Check for media
         if (event && event.type && (event.type === 'image' || event.type === 'document')) {

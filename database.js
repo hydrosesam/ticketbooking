@@ -12,7 +12,10 @@ const dbConfig = process.env.MYSQL_URL || process.env.DATABASE_URL || {
     waitForConnections: true,
     connectionLimit: 10,
     queueLimit: 0,
-    charset: 'utf8mb4'
+    charset: 'utf8mb4',
+    connectTimeout: 10000,
+    enableKeepAlive: true,
+    keepAliveInitialDelay: 10000
 };
 
 const pool = mysql.createPool(dbConfig);
@@ -172,6 +175,19 @@ async function initDatabase() {
             ('payment_mobile', '+968 76944041')
         `);
         console.log('✅ Synchronized initial settings.');
+
+        // 8. Create mn_enquiries table for premium tier leads
+        await connection.query(`
+            CREATE TABLE IF NOT EXISTS mn_enquiries (
+                id INT AUTO_INCREMENT PRIMARY KEY,
+                phone VARCHAR(20) NOT NULL,
+                name VARCHAR(100) DEFAULT NULL,
+                category VARCHAR(20) NOT NULL,
+                status VARCHAR(20) DEFAULT 'New',
+                timestamp TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+            )
+        `);
+        console.log('✅ Checked/Created table: mn_enquiries');
 
         connection.release();
     } catch (err) {
