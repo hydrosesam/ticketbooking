@@ -3,9 +3,9 @@ require('dotenv').config();
 
 // Create the connection pool
 // Railway MYSQL_URL connection string is the primary source
-const dbConfig = process.env.MYSQL_URL || process.env.DATABASE_URL || {
+const dbConfig = process.env.MYSQL_URL || {
     host: process.env.DB_HOST || 'interchange.proxy.rlwy.net',
-    port: 36032,
+    port: process.env.DB_PORT || 36032,
     user: process.env.DB_USER || 'root',
     password: process.env.DB_PASSWORD || 'NcxrttDtfqsAvxcQDIdQnvNCuRSqLnYf',
     database: process.env.DB_NAME || 'railway',
