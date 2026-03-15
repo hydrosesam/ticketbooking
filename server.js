@@ -782,6 +782,55 @@ app.get('/dashboard', requireAuth, async (req, res) => {
                 </div>
             </div>
 
+            <!-- LEADS SECTIONS -->
+            <div id="leads-guest" class="section">
+                <div class="card-table">
+                    <div class="table-header"><h2>Guest Lead Registry</h2></div>
+                    <div class="table-wrap">
+                        <table>
+                            <thead>
+                                <tr><th>Timestamp</th><th>Phone</th><th>Status</th><th>Action</th></tr>
+                            </thead>
+                            <tbody id="leads-guest-body">
+                                <tr><td colspan="4" style="text-align:center; padding:20px;">Loading Guest leads...</td></tr>
+                            </tbody>
+                        </table>
+                    </div>
+                </div>
+            </div>
+
+            <div id="leads-vvip" class="section">
+                <div class="card-table">
+                    <div class="table-header"><h2>VVIP Lead Registry</h2></div>
+                    <div class="table-wrap">
+                        <table>
+                            <thead>
+                                <tr><th>Timestamp</th><th>Phone</th><th>Status</th><th>Action</th></tr>
+                            </thead>
+                            <tbody id="leads-vvip-body">
+                                <tr><td colspan="4" style="text-align:center; padding:20px;">Loading VVIP leads...</td></tr>
+                            </tbody>
+                        </table>
+                    </div>
+                </div>
+            </div>
+
+            <div id="leads-vip" class="section">
+                <div class="card-table">
+                    <div class="table-header"><h2>VIP Lead Registry</h2></div>
+                    <div class="table-wrap">
+                        <table>
+                            <thead>
+                                <tr><th>Timestamp</th><th>Phone</th><th>Status</th><th>Action</th></tr>
+                            </thead>
+                            <tbody id="leads-vip-body">
+                                <tr><td colspan="4" style="text-align:center; padding:20px;">Loading VIP leads...</td></tr>
+                            </tbody>
+                        </table>
+                    </div>
+                </div>
+            </div>
+
             <!-- PENDING SECTION -->
             <div id="pending" class="section">
                 <div class="card-table">
@@ -1432,20 +1481,20 @@ app.get('/dashboard', requireAuth, async (req, res) => {
                 
                 const tiers = ['GUEST', 'VVIP', 'VIP'];
                 tiers.forEach(tier => {
-                    const body = document.getElementById(`leads-\${ tier.toLowerCase() } -body`);
+                    const body = document.getElementById('leads-' + tier.toLowerCase() + '-body');
                     if (!body) return;
                     
                     const filtered = enquiries.filter(e => e.category === tier);
-                    body.innerHTML = filtered.map(e => `
-            < tr >
-                            <td>\${new Date(e.timestamp).toLocaleString('en-GB')}</td>
-                            <td><strong>\${e.phone}</strong></td>
-                            <td><span class="badge \${e.status.toLowerCase() === 'new' ? 'pending' : 'scanned'}">\${e.status}</span></td>
-                            <td>
-                                <button class="btn-view" onclick="openChat('\${e.phone}', '\${e.phone}')">Open Chat</button>
-                            </td>
-                        </tr >
-            `).join('') || '<tr><td colspan="4" style="text-align:center; padding:20px;">No leads found</td></tr>';
+                    body.innerHTML = filtered.map(e => 
+                        '<tr>' +
+                            '<td>' + new Date(e.timestamp).toLocaleString('en-GB') + '</td>' +
+                            '<td><strong>' + e.phone + '</strong></td>' +
+                            '<td><span class="badge ' + (e.status.toLowerCase() === 'new' ? 'pending' : 'scanned') + '">' + e.status + '</span></td>' +
+                            '<td>' +
+                                '<button class="btn-view" onclick="openChat(\'' + e.phone + '\', \'' + e.phone + '\')">Open Chat</button>' +
+                            '</td>' +
+                        '</tr>'
+                    ).join('') || '<tr><td colspan="4" style="text-align:center; padding:20px;">No leads found</td></tr>';
                 });
             } catch (e) {
                 console.error("Failed to load enquiries", e);
