@@ -1443,7 +1443,6 @@ app.get('/dashboard', requireAuth, async (req, res) => {
                     var time = new Date(conv.timestamp).toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'});
                     var preview = conv.message_type === 'text' ? (conv.content || '') : '[' + conv.message_type + ']';
                     var unread = parseInt(conv.unread_count || 0);
-                    
                     var nameDisplay = conv.phone;
                     try {
                         if (conv.temp_members) {
@@ -1453,11 +1452,10 @@ app.get('/dashboard', requireAuth, async (req, res) => {
                     } catch(e) {}
 
                     var badgeHtml = unread > 0 ? '<span class="unread-badge">' + unread + '</span>' : '';
-                    var contentHtml = '<span class="conversation-time">' + time + '</span>' +
-                                     '<div class="conversation-phone">' + nameDisplay + badgeHtml + '</div>' +
-                                     '<div class="conversation-preview">' + preview + '</div>';
-                    
-                    el.innerHTML = contentHtml;
+                    el.innerHTML = '<span class="conversation-time">' + time + '</span>' +
+                                   '<div class="conversation-phone">' + nameDisplay + badgeHtml + '</div>' +
+                                   '<div class="conversation-preview">' + preview + '</div>';
+                                   
                     el.onclick = function() { openChat(conv.phone, nameDisplay); };
                     list.appendChild(el);
                 });
@@ -1493,7 +1491,7 @@ app.get('/dashboard', requireAuth, async (req, res) => {
                              '<td><strong>' + e.phone + '</strong></td>' +
                              '<td><span class="badge ' + badgeClass + '">' + e.status + '</span></td>' +
                              '<td>' +
-                                 '<button class="btn-view" onclick="openChat(\'' + e.phone + '\', \'' + e.phone + '\')">Open Chat</button>' +
+                                 '<button class="btn-view" onclick="openChat(\\\'' + e.phone + '\\\', \\\'' + e.phone + '\\\')">Open Chat</button>' +
                              '</td>' +
                          '</tr>';
                     }).join('') || '<tr><td colspan="4" style="text-align:center; padding:20px;">No leads found</td></tr>';
