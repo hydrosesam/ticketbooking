@@ -168,7 +168,7 @@ async function sendMNCategorySelect(phone) {
 
 async function sendMNQuantityRequest(phone, category, availableSeats) {
     const rows = [];
-    const maxQty = Math.min(10, availableSeats);
+    const maxQty = Math.min(9, availableSeats);
 
     for (let i = 1; i <= maxQty; i++) {
         rows.push({
