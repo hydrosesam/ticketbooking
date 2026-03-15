@@ -519,7 +519,37 @@ async function handleMusicNightFlow(phone, event) {
         return;
     }
 
-    // --- 3. PAYMENT UPLOAD HANDLING (Special Case for Media) ---
+    // --- 3. NAVIGATION HANDLERS ---
+    if (message === "BTN_MN_BOOK_NOW") {
+        await sendMNCategorySelect(phone);
+        await saveUserState(phone, "MN_CATEGORY_SELECT");
+        return;
+    }
+
+    if (message === "BTN_BACK") {
+        console.log(`[FLOW] Back navigation from ${currentState}`);
+        if (currentState === "MN_CATEGORY_SELECT") {
+            await sendMNWelcome(phone);
+            await saveUserState(phone, "MN_WELCOME_WAIT");
+        } else if (currentState === "MN_QUANTITY_INPUT") {
+            await sendMNCategorySelect(phone);
+            await saveUserState(phone, "MN_CATEGORY_SELECT");
+        } else if (currentState === "MN_MEMBER_NAME") {
+            const inv = await db.query("SELECT * FROM mn_inventory WHERE category = ?", [user.category]);
+            const available = inv.length > 0 ? (inv[0].total_seats - inv[0].booked_seats) : 10;
+            await sendMNQuantityRequest(phone, user.category, available);
+            await saveUserState(phone, "MN_QUANTITY_INPUT");
+        } else if (currentState === "MN_CONFIRM_AWAIT") {
+            await sendMNMemberNameRequest(phone);
+            await saveUserState(phone, "MN_MEMBER_NAME");
+        } else if (currentState === "MN_PAYMENT_UPLOAD") {
+            await showMNBookingSummary(phone, { category: user.category, quantity: user.quantity, members: user.members });
+            await saveUserState(phone, "MN_CONFIRM_AWAIT");
+        }
+        return;
+    }
+
+    // --- 4. PAYMENT UPLOAD HANDLING (Special Case for Media) ---
     if (currentState === "MN_PAYMENT_UPLOAD") {
         let localPath = null;
         let ocrResult = null;
@@ -593,35 +623,6 @@ async function handleMusicNightFlow(phone, event) {
         }
     }
 
-    // --- 4. NAVIGATION HANDLERS ---
-    if (message === "BTN_MN_BOOK_NOW") {
-        await sendMNCategorySelect(phone);
-        await saveUserState(phone, "MN_CATEGORY_SELECT");
-        return;
-    }
-
-    if (message === "BTN_BACK") {
-        console.log(`[FLOW] Back navigation from ${currentState}`);
-        if (currentState === "MN_CATEGORY_SELECT") {
-            await sendMNWelcome(phone);
-            await saveUserState(phone, "MN_WELCOME_WAIT");
-        } else if (currentState === "MN_QUANTITY_INPUT") {
-            await sendMNCategorySelect(phone);
-            await saveUserState(phone, "MN_CATEGORY_SELECT");
-        } else if (currentState === "MN_MEMBER_NAME") {
-            const inv = await db.query("SELECT * FROM mn_inventory WHERE category = ?", [user.category]);
-            const available = inv.length > 0 ? (inv[0].total_seats - inv[0].booked_seats) : 10;
-            await sendMNQuantityRequest(phone, user.category, available);
-            await saveUserState(phone, "MN_QUANTITY_INPUT");
-        } else if (currentState === "MN_CONFIRM_AWAIT") {
-            await sendMNMemberNameRequest(phone);
-            await saveUserState(phone, "MN_MEMBER_NAME");
-        } else if (currentState === "MN_PAYMENT_UPLOAD") {
-            await showMNBookingSummary(phone, { category: user.category, quantity: user.quantity, members: user.members });
-            await saveUserState(phone, "MN_CONFIRM_AWAIT");
-        }
-        return;
-    }
 
     // --- 5. STATE SWITCH ---
     if (typeof message !== 'string' || message.trim() === "") return;
