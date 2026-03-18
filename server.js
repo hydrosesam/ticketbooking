@@ -918,10 +918,10 @@ app.get('/dashboard', requireAuth, async (req, res) => {
                     <div class="table-wrap">
                         <table id="table-abandoned">
                             <thead>
-                                <tr><th>Timestamp</th><th>Customer</th><th>Category</th><th>Qty</th><th>Amount</th><th>Action</th></tr>
+                                <tr><th>Timestamp</th><th>Name</th><th>Phone</th><th>Category</th><th>Qty</th><th>Amount</th><th>Action</th></tr>
                             </thead>
                             <tbody id="abandoned-body">
-                                <tr><td colspan="6" style="text-align:center; padding:20px;">Loading abandoned carts...</td></tr>
+                                <tr><td colspan="7" style="text-align:center; padding:20px;">Loading abandoned carts...</td></tr>
                             </tbody>
                         </table>
                     </div>
@@ -1629,7 +1629,8 @@ app.get('/dashboard', requireAuth, async (req, res) => {
 
                     return '<tr>' +
                         '<td>' + date + '</td>' +
-                        '<td><strong>' + c.name + '</strong><br><span style="font-size:12px;color:#64748b;">' + c.phone + '</span></td>' +
+                        '<td><strong>' + c.name + '</strong></td>' +
+                        '<td>' + c.phone + '</td>' +
                         '<td>' + c.category + '</td>' +
                         '<td>' + c.quantity + '</td>' +
                         '<td>OMR ' + parseFloat(c.amount).toFixed(2) + '</td>' +
@@ -1640,7 +1641,7 @@ app.get('/dashboard', requireAuth, async (req, res) => {
                             '</div>' +
                         '</td>' +
                     '</tr>';
-                }).join('') || '<tr><td colspan="6" style="text-align:center; padding:20px;">No abandoned carts yet.</td></tr>';
+                }).join('') || '<tr><td colspan="7" style="text-align:center; padding:20px;">No abandoned carts yet.</td></tr>';
             } catch (e) {
                 console.error("Failed to load abandoned carts", e);
             }
