@@ -482,12 +482,21 @@ async function handleMusicNightFlow(phone, event) {
     console.log(`[FLOW] Phone: ${phone} | State: ${currentState} | Msg: "${message}" | Clean: "${cleanMsg}"`);
 
     // --- 1. GLOBAL RESET TRIGGERS (Priority) ---
-    const resetTriggers = ['menu', 'hi', 'hello', 'music night', 'restart', 'start', 'music', 'hey', 'reset'];
-    const isResetTrigger = resetTriggers.includes(cleanMsg) || (cleanMsg.length < 10 && resetTriggers.some(t => cleanMsg.includes(t)));
+    // Allow ANY text keyword to reset/start the flow, except where we expect text input.
+    let isResetTrigger = false;
+    if (event && event.type === 'text') {
+        if (currentState !== 'MN_MEMBER_NAME' && currentState !== 'MN_PAYMENT_UPLOAD') {
+            if (currentState === 'MN_QUANTITY_INPUT' && !isNaN(parseInt(cleanMsg))) {
+                isResetTrigger = false;
+            } else {
+                isResetTrigger = true;
+            }
+        }
+    }
 
     // DISABLED for MN_PAYMENT_UPLOAD state as per user request
     if (currentState !== "MN_PAYMENT_UPLOAD") {
-        if (isResetTrigger || message === "BTN_MUSIC_NIGHT") {
+        if (isResetTrigger || message === "BTN_MUSIC_NIGHT" || currentState === "MN_MAIN") {
             console.log(`[FLOW] Global Reset Triggered by ${phone}`);
             await db.query(`UPDATE mn_users SET temp_category = NULL, temp_quantity = NULL, temp_members = NULL, temp_slip_url = NULL WHERE phone_number = ?`, [phone]);
             await sendMNWelcome(phone);

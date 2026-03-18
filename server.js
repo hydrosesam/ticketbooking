@@ -764,9 +764,12 @@ app.get('/dashboard', requireAuth, async (req, res) => {
                 </div>
 
                 <div class="card-table">
-                    <div class="table-header"><h2>Recent Pending Approvals (Last 10)</h2></div>
+                    <div class="table-header" style="display:flex; justify-content:space-between; align-items:center;">
+                        <h2>Recent Pending Approvals (Last 10)</h2>
+                        <button class="btn-mini btn-view" onclick="downloadTableCSV('table-overview-pending', 'Recent_Pending_Approvals')">Export CSV</button>
+                    </div>
                     <div class="table-wrap">
-                        <table>
+                        <table id="table-overview-pending">
                             <thead>
                                 <tr><th>Booking</th><th>Date/Time (Oman)</th><th>Phone</th><th>Category</th><th>Qty</th><th>Verification</th><th>Action</th></tr>
                             </thead>
@@ -810,9 +813,12 @@ app.get('/dashboard', requireAuth, async (req, res) => {
 
             <!-- INBOX SECTION -->
             <div id="inbox" class="section">
-                <div style="margin-bottom: 30px;">
-                    <h1 style="margin:0; font-size:28px; font-weight:800;">Messages</h1>
-                    <p style="color:#64748b;">WhatsApp Business API Inbox</p>
+                <div style="margin-bottom: 30px; display:flex; justify-content:space-between; align-items:flex-end;">
+                    <div>
+                        <h1 style="margin:0; font-size:28px; font-weight:800;">Messages</h1>
+                        <p style="color:#64748b; margin-bottom:0;">WhatsApp Business API Inbox</p>
+                    </div>
+                    <button class="btn-action btn-view" style="padding:8px 16px; font-size:12px;" onclick="downloadInboxCSV()">Export CSV</button>
                 </div>
                 <div class="inbox-container">
                     <div class="inbox-list">
@@ -847,9 +853,12 @@ app.get('/dashboard', requireAuth, async (req, res) => {
             <!-- LEADS SECTIONS -->
             <div id="leads-guest" class="section">
                 <div class="card-table">
-                    <div class="table-header"><h2>Guest Lead Registry</h2></div>
+                    <div class="table-header" style="display:flex; justify-content:space-between; align-items:center;">
+                        <h2>Guest Lead Registry</h2>
+                        <button class="btn-mini btn-view" onclick="downloadTableCSV('table-leads-guest', 'Guest_Leads')">Export CSV</button>
+                    </div>
                     <div class="table-wrap">
-                        <table>
+                        <table id="table-leads-guest">
                             <thead>
                                 <tr><th>Timestamp</th><th>Phone</th><th>Status</th><th>Action</th></tr>
                             </thead>
@@ -863,9 +872,12 @@ app.get('/dashboard', requireAuth, async (req, res) => {
 
             <div id="leads-vvip" class="section">
                 <div class="card-table">
-                    <div class="table-header"><h2>VVIP Lead Registry</h2></div>
+                    <div class="table-header" style="display:flex; justify-content:space-between; align-items:center;">
+                        <h2>VVIP Lead Registry</h2>
+                        <button class="btn-mini btn-view" onclick="downloadTableCSV('table-leads-vvip', 'VVIP_Leads')">Export CSV</button>
+                    </div>
                     <div class="table-wrap">
-                        <table>
+                        <table id="table-leads-vvip">
                             <thead>
                                 <tr><th>Timestamp</th><th>Phone</th><th>Status</th><th>Action</th></tr>
                             </thead>
@@ -879,9 +891,12 @@ app.get('/dashboard', requireAuth, async (req, res) => {
 
             <div id="leads-vip" class="section">
                 <div class="card-table">
-                    <div class="table-header"><h2>VIP Lead Registry</h2></div>
+                    <div class="table-header" style="display:flex; justify-content:space-between; align-items:center;">
+                        <h2>VIP Lead Registry</h2>
+                        <button class="btn-mini btn-view" onclick="downloadTableCSV('table-leads-vip', 'VIP_Leads')">Export CSV</button>
+                    </div>
                     <div class="table-wrap">
-                        <table>
+                        <table id="table-leads-vip">
                             <thead>
                                 <tr><th>Timestamp</th><th>Phone</th><th>Status</th><th>Action</th></tr>
                             </thead>
@@ -896,9 +911,12 @@ app.get('/dashboard', requireAuth, async (req, res) => {
             <!-- ABANDONED SECTION -->
             <div id="abandoned" class="section">
                 <div class="card-table">
-                    <div class="table-header"><h2>Abandoned Carts (Awaiting Payment)</h2></div>
+                    <div class="table-header" style="display:flex; justify-content:space-between; align-items:center;">
+                        <h2>Abandoned Carts (Awaiting Payment)</h2>
+                        <button class="btn-mini btn-view" onclick="downloadTableCSV('table-abandoned', 'Abandoned_Carts')">Export CSV</button>
+                    </div>
                     <div class="table-wrap">
-                        <table>
+                        <table id="table-abandoned">
                             <thead>
                                 <tr><th>Timestamp</th><th>Customer</th><th>Category</th><th>Qty</th><th>Amount</th><th>Action</th></tr>
                             </thead>
@@ -913,9 +931,12 @@ app.get('/dashboard', requireAuth, async (req, res) => {
             <!-- PENDING SECTION -->
             <div id="pending" class="section">
                 <div class="card-table">
-                    <div class="table-header"><h2>Not Approved Tickets</h2></div>
+                    <div class="table-header" style="display:flex; justify-content:space-between; align-items:center;">
+                        <h2>Not Approved Tickets</h2>
+                        <button class="btn-mini btn-view" onclick="downloadTableCSV('table-not-approved', 'Not_Approved_Tickets')">Export CSV</button>
+                    </div>
                     <div class="table-wrap">
-                        <table>
+                        <table id="table-not-approved">
                             <thead>
                                 <tr><th>Booking</th><th>Date/Time (Oman)</th><th>Phone</th><th>Category</th><th>Qty</th><th>Verification</th><th>Action</th></tr>
                             </thead>
@@ -960,9 +981,12 @@ app.get('/dashboard', requireAuth, async (req, res) => {
             <!-- APPROVED SECTION -->
             <div id="approved" class="section">
                <div class="card-table">
-                    <div class="table-header"><h2>Approved Tickets History</h2></div>
+                     <div class="table-header" style="display:flex; justify-content:space-between; align-items:center;">
+                        <h2>Approved Tickets History</h2>
+                        <button class="btn-mini btn-view" onclick="downloadTableCSV('table-approved-history', 'Approved_Tickets')">Export CSV</button>
+                    </div>
                     <div class="table-wrap">
-                        <table>
+                        <table id="table-approved-history">
                             <thead>
                                 <tr><th>Booking</th><th>Date/Time</th><th>Customer</th><th>Bank Info</th><th>Total</th><th>Status</th><th>Entry</th></tr>
                             </thead>
@@ -1016,9 +1040,12 @@ app.get('/dashboard', requireAuth, async (req, res) => {
                 </div>
 
                 <div class="card-table">
-                    <div class="table-header"><h2>All Transactions Log</h2></div>
+                    <div class="table-header" style="display:flex; justify-content:space-between; align-items:center;">
+                        <h2>All Transactions Log</h2>
+                        <button class="btn-mini btn-view" onclick="downloadTableCSV('table-transactions', 'All_Transactions')">Export CSV</button>
+                    </div>
                     <div class="table-wrap">
-                        <table>
+                        <table id="table-transactions">
                             <thead>
                                 <tr><th>Booking</th><th>Date/Time</th><th>Customer Info</th><th>Bank Transaction</th><th>Total Amt</th><th>Status</th></tr>
                             </thead>
@@ -1064,9 +1091,12 @@ app.get('/dashboard', requireAuth, async (req, res) => {
             <!-- HISTORY SECTION -->
             <div id="history" class="section">
                 <div class="card-table">
-                    <div class="table-header"><h2>Verified Attendee Registry</h2></div>
+                    <div class="table-header" style="display:flex; justify-content:space-between; align-items:center;">
+                        <h2>Verified Attendee Registry</h2>
+                        <button class="btn-mini btn-view" onclick="downloadTableCSV('table-verified-history', 'Verified_Attendees')">Export CSV</button>
+                    </div>
                     <div class="table-wrap">
-                        <table>
+                        <table id="table-verified-history">
                             <thead>
                                 <tr><th>Booking</th><th>Booking Time</th><th>Category</th><th>Qty</th><th>Phone</th><th>Entry Time</th></tr>
                             </thead>
@@ -1099,9 +1129,12 @@ app.get('/dashboard', requireAuth, async (req, res) => {
                 </div>
 
                 <div class="card-table">
-                    <div class="table-header"><h2>Authorized Personnel</h2></div>
+                    <div class="table-header" style="display:flex; justify-content:space-between; align-items:center;">
+                        <h2>Authorized Personnel</h2>
+                        <button class="btn-mini btn-view" onclick="downloadTableCSV('table-admins-list', 'Authorized_Personnel')">Export CSV</button>
+                    </div>
                     <div class="table-wrap">
-                        <table>
+                        <table id="table-admins-list">
                             <thead>
                                 <tr><th>Name</th><th>WhatsApp Number</th><th>Role</th><th>Action</th></tr>
                             </thead>
@@ -1738,6 +1771,58 @@ app.get('/dashboard', requireAuth, async (req, res) => {
                 });
                 if (res.ok) location.reload(); else alert('Failed to delete');
             } catch(e) { alert('Error'); }
+        }
+        function triggerDownload(csvContent, filename) {
+            var blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
+            var link = document.createElement("a");
+            if (link.download !== undefined) {
+                var url = URL.createObjectURL(blob);
+                link.setAttribute("href", url);
+                link.setAttribute("download", filename);
+                link.style.visibility = 'hidden';
+                document.body.appendChild(link);
+                link.click();
+                document.body.removeChild(link);
+            }
+        }
+
+        function downloadTableCSV(tableId, title) {
+            var table = document.getElementById(tableId);
+            if (!table) return;
+            var rows = table.querySelectorAll('tr');
+            var csv = [];
+            for (var i = 0; i < rows.length; i++) {
+                var row = [], cols = rows[i].querySelectorAll('td, th');
+                for (var j = 0; j < cols.length; j++) {
+                    var clone = cols[j].cloneNode(true);
+                    var buttons = clone.querySelectorAll('button, a.btn-view, a.btn-action');
+                    buttons.forEach(b => b.remove());
+                    // Special handling for the inner text containing newlines or quotes
+                    var text = clone.innerText.replace(/"/g, '""').replace(/(\r\n|\n|\r)/gm, " | ").trim();
+                    row.push('"' + text + '"');
+                }
+                csv.push(row.join(','));
+            }
+            triggerDownload(csv.join('\n'), title + '.csv');
+        }
+
+        function downloadInboxCSV() {
+            var items = document.querySelectorAll('.conversation-item');
+            var csv = [['"Phone/Name"', '"Time"', '"Unread"', '"Last Message Preview"'].join(',')];
+            items.forEach(function(el) {
+                var time = el.querySelector('.conversation-time').innerText.replace(/"/g, '""').trim();
+                var phoneDiv = el.querySelector('.conversation-phone').cloneNode(true);
+                var badge = phoneDiv.querySelector('.unread-badge');
+                var unread = badge ? badge.innerText : '0';
+                if(badge) badge.remove();
+                var phoneName = phoneDiv.innerText.replace(/"/g, '""').replace(/(\r\n|\n|\r)/gm, " ").trim();
+                
+                var previewDiv = el.querySelector('.conversation-preview');
+                var preview = previewDiv ? previewDiv.innerText.replace(/"/g, '""').replace(/(\r\n|\n|\r)/gm, " ").trim() : '';
+                
+                csv.push(['"'+phoneName+'"', '"'+time+'"', '"'+unread+'"', '"'+preview+'"'].join(','));
+            });
+            triggerDownload(csv.join('\n'), 'Inbox_Export.csv');
         }
     </script>
 
