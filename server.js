@@ -1674,6 +1674,13 @@ app.get('/dashboard', requireAuth, async (req, res) => {
         loadAbandonedCarts();
 
         async function openChat(phone, nameDisplay) {
+            // Automatically switch to the Inbox tab so the chat is visible
+            var inboxNav;
+            document.querySelectorAll('.nav-item').forEach(function(n) {
+                if (n.innerText.includes('Inbox')) inboxNav = n;
+            });
+            showTab('inbox', inboxNav);
+
             activeChatPhone = phone;
             document.getElementById('chat-empty').style.display = 'none';
             document.getElementById('chat-area').style.display = 'flex';
