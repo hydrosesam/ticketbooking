@@ -1797,13 +1797,13 @@ app.get('/dashboard', requireAuth, async (req, res) => {
                     var clone = cols[j].cloneNode(true);
                     var buttons = clone.querySelectorAll('button, a.btn-view, a.btn-action');
                     buttons.forEach(b => b.remove());
-                    // Special handling for the inner text containing newlines or quotes
-                    var text = clone.innerText.replace(/"/g, '""').replace(/(\r\n|\n|\r)/gm, " | ").trim();
+                    // Double escape backslashes so they survive the Node template literal evaluation
+                    var text = clone.innerText.replace(/"/g, '""').replace(/(\\r\\n|\\n|\\r)/gm, " | ").trim();
                     row.push('"' + text + '"');
                 }
                 csv.push(row.join(','));
             }
-            triggerDownload(csv.join('\n'), title + '.csv');
+            triggerDownload(csv.join('\\n'), title + '.csv');
         }
 
         function downloadInboxCSV() {
@@ -1815,16 +1815,17 @@ app.get('/dashboard', requireAuth, async (req, res) => {
                 var badge = phoneDiv.querySelector('.unread-badge');
                 var unread = badge ? badge.innerText : '0';
                 if(badge) badge.remove();
-                var phoneName = phoneDiv.innerText.replace(/"/g, '""').replace(/(\r\n|\n|\r)/gm, " ").trim();
+                var phoneName = phoneDiv.innerText.replace(/"/g, '""').replace(/(\\r\\n|\\n|\\r)/gm, " ").trim();
                 
                 var previewDiv = el.querySelector('.conversation-preview');
-                var preview = previewDiv ? previewDiv.innerText.replace(/"/g, '""').replace(/(\r\n|\n|\r)/gm, " ").trim() : '';
+                var preview = previewDiv ? previewDiv.innerText.replace(/"/g, '""').replace(/(\\r\\n|\\n|\\r)/gm, " ").trim() : '';
                 
                 csv.push(['"'+phoneName+'"', '"'+time+'"', '"'+unread+'"', '"'+preview+'"'].join(','));
             });
-            triggerDownload(csv.join('\n'), 'Inbox_Export.csv');
+            triggerDownload(csv.join('\\n'), 'Inbox_Export.csv');
         }
     </script>
+
 
     <!-- Add Admin Modal -->
         <div id="add-admin-modal" style="position:fixed; top:0; left:0; width:100%; height:100%; background:rgba(0,0,0,0.8); display:none; justify-content:center; align-items:center; z-index:2000;">
