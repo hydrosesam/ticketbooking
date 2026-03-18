@@ -228,7 +228,7 @@ app.get('/admin/inbox/conversations', requireAuth, async (req, res) => {
 app.get('/admin/inbox/export-csv', requireAuth, async (req, res) => {
     try {
         const rows = await db.query(`
-            SELECT m1.*, u.temp_members, u.name as user_name, u.member_name as user_member_name,
+            SELECT m1.*, u.temp_members,
                    (SELECT COUNT(*) FROM mn_messages m3
                     WHERE m3.phone = m1.phone AND m3.direction = 'inbound' AND m3.is_read = 0) AS unread_count
             FROM mn_messages m1
@@ -245,8 +245,16 @@ app.get('/admin/inbox/export-csv', requireAuth, async (req, res) => {
 
         let csv = '"Phone/Name","Time","Unread","Last Message Preview"\n';
         for (const r of rows) {
-            let phoneNameTemp = r.user_name || r.user_member_name || 'Customer';
-            let phoneName = phoneNameTemp + ' (' + r.phone + ')';
+            let phoneName = r.phone;
+            try {
+                if (r.temp_members) {
+                    let members = typeof r.temp_members === 'string' ? JSON.parse(r.temp_members) : r.temp_members;
+                    if (members && members.length > 0) {
+                        phoneName = members[0] + ' (' + r.phone + ')';
+                    }
+                }
+            } catch(e) {}
+            
             phoneName = phoneName.replace(/"/g, '""').replace(/(\r\n|\n|\r)/gm, " ").trim();
             
             let timeStr = new Date(r.timestamp).toLocaleString();
