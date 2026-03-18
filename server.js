@@ -224,6 +224,50 @@ app.get('/admin/inbox/conversations', requireAuth, async (req, res) => {
     }
 });
 
+// Export filtered inbox to CSV (Removing duplicates and registered users)
+app.get('/admin/inbox/export-csv', requireAuth, async (req, res) => {
+    try {
+        const rows = await db.query(`
+            SELECT m1.*, u.temp_members, u.name as user_name, u.member_name as user_member_name,
+                   (SELECT COUNT(*) FROM mn_messages m3
+                    WHERE m3.phone = m1.phone AND m3.direction = 'inbound' AND m3.is_read = 0) AS unread_count
+            FROM mn_messages m1
+            LEFT JOIN mn_messages m2
+                ON m1.phone = m2.phone AND m1.timestamp < m2.timestamp
+            LEFT JOIN mn_users u
+                ON m1.phone = u.phone_number
+            WHERE m2.id IS NULL
+              AND m1.phone NOT IN (SELECT phone FROM mn_bookings)
+              AND m1.phone NOT IN (SELECT phone FROM mn_enquiries)
+              AND m1.phone NOT IN (SELECT phone FROM mn_abandoned_carts)
+            ORDER BY m1.timestamp DESC
+        `);
+
+        let csv = '"Phone/Name","Time","Unread","Last Message Preview"\n';
+        for (const r of rows) {
+            let phoneNameTemp = r.user_name || r.user_member_name || 'Customer';
+            let phoneName = phoneNameTemp + ' (' + r.phone + ')';
+            phoneName = phoneName.replace(/"/g, '""').replace(/(\r\n|\n|\r)/gm, " ").trim();
+            
+            let timeStr = new Date(r.timestamp).toLocaleString();
+            let unread = r.unread_count > 0 ? r.unread_count : '0';
+            
+            let preview = (r.content || '').replace(/"/g, '""').replace(/(\r\n|\n|\r)/gm, " ").trim();
+            if (r.message_type === 'image') preview = '[Image] ' + preview;
+            if (r.message_type === 'document') preview = '[Document] ' + preview;
+            
+            csv += '"' + phoneName + '","' + timeStr + '","' + unread + '","' + preview + '"\n';
+        }
+
+        res.header('Content-Type', 'text/csv');
+        res.attachment('Inbox_Filtered_Export.csv');
+        res.send(csv);
+    } catch (err) {
+        console.error("Inbox CSV export error:", err);
+        res.status(500).send("Error generating CSV");
+    }
+});
+
 // Get message history for a specific phone number
 app.get('/admin/inbox/messages/:phone', requireAuth, async (req, res) => {
     try {
@@ -1815,22 +1859,7 @@ app.get('/dashboard', requireAuth, async (req, res) => {
         }
 
         function downloadInboxCSV() {
-            var items = document.querySelectorAll('.conversation-item');
-            var csv = [['"Phone/Name"', '"Time"', '"Unread"', '"Last Message Preview"'].join(',')];
-            items.forEach(function(el) {
-                var time = el.querySelector('.conversation-time').innerText.replace(/"/g, '""').trim();
-                var phoneDiv = el.querySelector('.conversation-phone').cloneNode(true);
-                var badge = phoneDiv.querySelector('.unread-badge');
-                var unread = badge ? badge.innerText : '0';
-                if(badge) badge.remove();
-                var phoneName = phoneDiv.innerText.replace(/"/g, '""').replace(/(\\r\\n|\\n|\\r)/gm, " ").trim();
-                
-                var previewDiv = el.querySelector('.conversation-preview');
-                var preview = previewDiv ? previewDiv.innerText.replace(/"/g, '""').replace(/(\\r\\n|\\n|\\r)/gm, " ").trim() : '';
-                
-                csv.push(['"'+phoneName+'"', '"'+time+'"', '"'+unread+'"', '"'+preview+'"'].join(','));
-            });
-            triggerDownload(csv.join('\\n'), 'Inbox_Export.csv');
+            window.location.href = '/admin/inbox/export-csv';
         }
     </script>
 
