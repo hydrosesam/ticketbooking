@@ -153,7 +153,7 @@ async function sendMNCategorySelect(phone) {
                     {
                         title: "Available Categories",
                         rows: [
-                            { id: "CAT_GUEST", title: "GUEST", description: "OMR 50 | Sofa Seating (2nd & 3rd Row)" },
+                           
                             { id: "CAT_VVIP", title: "VVIP", description: "OMR 20" },
                             { id: "CAT_VIP", title: "VIP", description: "OMR 10" },
                             { id: "CAT_GOLD", title: "GOLD", description: "OMR 5" },
