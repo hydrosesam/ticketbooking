@@ -542,6 +542,8 @@ async function handleMusicNightFlow(phone, event) {
                 isResetTrigger = true;
             }
         }
+    }
+
     // --- 2. ADMIN REMOTE APPROVAL HANDLER ---
     if (message.startsWith("ADM_APP_") || message.startsWith("ADM_DENY_")) {
         const isAdmin = (await db.query("SELECT * FROM mn_admins WHERE phone = ? AND is_active = TRUE", [phone])).length > 0;
@@ -906,6 +908,14 @@ async function authorizeAndSendTicket(bookingNo) {
         // Update status
         await db.query("UPDATE mn_bookings SET payment_status = 'approved' WHERE booking_no = ?", [bookingNo]);
 
+        const userRows = await db.query("SELECT language FROM mn_users WHERE phone_number = ?", [phone]);
+        const isMl = userRows.length > 0 && userRows[0].language === 'ml';
+
+        const approveMsg = isMl
+            ? "✅ പേയ്‌മെന്റ് അംഗീകരിച്ചു! നിങ്ങളുടെ ടിക്കറ്റ് തയ്യാറാകുന്നു..."
+            : "✅ Payment Approved! Your ticket is being generated...";
+        await sendText(phone, approveMsg);
+
         const formattedBookingNo = `MMN-${b.booking_no.toString().padStart(4, '0')}`;
         const bookingData = {
             bookingNo: b.booking_no, // Integer
@@ -943,7 +953,7 @@ async function authorizeAndSendTicket(bookingNo) {
         const mediaId = mediaRes.data.id;
         if (!mediaId) throw new Error("Failed to get media ID from Meta");
 
-        const pdfCaption = isMl 
+        const pdfCaption = isMl
             ? `🎉 നിങ്ങളുെട ടിക്കറ്റ് ഇതാ!\n\nബുക്കിംഗ് നമ്പർ: ${formattedBookingNo}\nമസ്‌കറ്റ് സ്റ്റാർ നൈറ്റ് 2026-ൽ കാണാം! 🎶`
             : `🎉 YOUR TICKET IS HERE!\n\nBooking No: ${formattedBookingNo}\nSee you at Muscat Star Night 2026! 🎶`;
 
@@ -1041,4 +1051,5 @@ module.exports = {
     generateAdminOTP,
     notifyAdminsOfPayment,
     sendManualMessage
-};
+}
+
