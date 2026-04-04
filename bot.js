@@ -542,16 +542,6 @@ async function handleMusicNightFlow(phone, event) {
                 isResetTrigger = true;
             }
         }
-    }    // --- 1.2 RESET LOGIC ---
-    if (currentState !== "MN_PAYMENT_UPLOAD") {
-        if (isResetTrigger || message === "BTN_MUSIC_NIGHT" || currentState === "MN_MAIN") {
-            console.log(`[FLOW] Global Reset Triggered by ${phone}`);
-            await db.query(`UPDATE mn_users SET state = 'MN_LANG_SELECT', temp_category = NULL, temp_quantity = NULL, temp_members = NULL, temp_slip_url = NULL WHERE phone_number = ?`, [phone]);
-            await sendMNLanguageSelect(phone);
-            return;
-        }
-    }
-
     // --- 2. ADMIN REMOTE APPROVAL HANDLER ---
     if (message.startsWith("ADM_APP_") || message.startsWith("ADM_DENY_")) {
         const isAdmin = (await db.query("SELECT * FROM mn_admins WHERE phone = ? AND is_active = TRUE", [phone])).length > 0;
@@ -599,7 +589,6 @@ async function handleMusicNightFlow(phone, event) {
             await sendMNMemberNameRequest(phone, lang);
             await saveUserState(phone, "MN_MEMBER_NAME");
         } else if (currentState === "MN_PAYMENT_UPLOAD") {
-            // Remove from abandoned carts if they go back from payment step
             try {
                 await db.query("DELETE FROM mn_abandoned_carts WHERE phone = ?", [phone]);
             } catch (err) { console.error("❌ Failed to remove abandoned cart on back:", err.message); }
@@ -608,6 +597,16 @@ async function handleMusicNightFlow(phone, event) {
             await saveUserState(phone, "MN_CONFIRM_AWAIT");
         }
         return;
+    }
+
+    // --- 4. GLOBAL RESET TRIGGERS ---
+    if (currentState !== "MN_PAYMENT_UPLOAD") {
+        if (isResetTrigger || message === "BTN_MUSIC_NIGHT" || currentState === "MN_MAIN") {
+            console.log(`[FLOW] Global Reset Triggered by ${phone}`);
+            await db.query(`UPDATE mn_users SET state = 'MN_LANG_SELECT', temp_category = NULL, temp_quantity = NULL, temp_members = NULL, temp_slip_url = NULL WHERE phone_number = ?`, [phone]);
+            await sendMNLanguageSelect(phone);
+            return;
+        }
     }
 
     // --- 4. PAYMENT UPLOAD HANDLING (Special Case for Media) ---
@@ -889,7 +888,6 @@ async function processPendingBooking(phone, user, slipUrl, ocrData = null) {
         try {
             await db.query("DELETE FROM mn_abandoned_carts WHERE phone = ?", [phone]);
         } catch (err) { console.error("❌ Failed to remove converted cart:", err.message); }
-
     } catch (err) {
         console.error("❌ [MN] Pending booking failed:", err);
         await sendText(phone, "❌ Sorry, an error occurred while saving your booking. Our team has been notified.");
@@ -945,6 +943,10 @@ async function authorizeAndSendTicket(bookingNo) {
         const mediaId = mediaRes.data.id;
         if (!mediaId) throw new Error("Failed to get media ID from Meta");
 
+        const pdfCaption = isMl 
+            ? `🎉 നിങ്ങളുെട ടിക്കറ്റ് ഇതാ!\n\nബുക്കിംഗ് നമ്പർ: ${formattedBookingNo}\nമസ്‌കറ്റ് സ്റ്റാർ നൈറ്റ് 2026-ൽ കാണാം! 🎶`
+            : `🎉 YOUR TICKET IS HERE!\n\nBooking No: ${formattedBookingNo}\nSee you at Muscat Star Night 2026! 🎶`;
+
         // Send Document
         console.log(`[AUTH] Sending Document to customer for ${bookingNo}...`);
         await sendWhatsAppMessage(phone, {
@@ -952,7 +954,7 @@ async function authorizeAndSendTicket(bookingNo) {
             document: {
                 id: mediaId,
                 filename: `Ticket No- ${formattedBookingNo}.pdf`,
-                caption: `🎉 YOUR TICKET IS HERE!\n\nBooking No: ${formattedBookingNo}\nSee you at Muscat Star Night 2026! 🎶`
+                caption: pdfCaption
             }
         });
 
@@ -976,9 +978,13 @@ async function authorizeAndSendTicket(bookingNo) {
                 { headers: { 'Authorization': `Bearer ${WHATSAPP_ACCESS_TOKEN}`, ...qrForm.getHeaders() } }
             );
 
+            const qrCaption = isMl
+                ? "📱 ടിപ്പ്: വേഗത്തിലുള്ള സ്കാനിംഗിനായി പ്രവേശന കവാടത്തിൽ ഈ QR കോഡ് കാണിക്കുക!"
+                : "📱 Tip: Show this QR code at the entrance for quick scanning!";
+
             await sendWhatsAppMessage(phone, {
                 type: "image",
-                image: { id: qrMediaRes.data.id, caption: "📱 Tip: Show this QR code at the entrance for quick scanning!" }
+                image: { id: qrMediaRes.data.id, caption: qrCaption }
             });
             fs.unlinkSync(qrPath);
         }
