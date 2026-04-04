@@ -31,7 +31,8 @@ async function initDatabase() {
         await connection.query(`
             CREATE TABLE IF NOT EXISTS mn_users (
                 phone_number VARCHAR(20) PRIMARY KEY,
-                state VARCHAR(50) NOT NULL DEFAULT 'MN_MAIN',
+                state VARCHAR(50) NOT NULL DEFAULT 'MN_LANG_SELECT',
+                language VARCHAR(10) DEFAULT 'en',
                 temp_category VARCHAR(20) DEFAULT NULL,
                 temp_quantity INT DEFAULT NULL,
                 temp_members JSON DEFAULT NULL,
@@ -143,6 +144,7 @@ async function initDatabase() {
         await addColumn('mn_bookings', 'bank_datetime', 'VARCHAR(50) DEFAULT NULL');
         await addColumn('mn_bookings', 'bank_beneficiary', 'VARCHAR(100) DEFAULT NULL');
         await addColumn('mn_bookings', 'bank_mobile', 'VARCHAR(20) DEFAULT NULL');
+        await addColumn('mn_users', 'language', 'VARCHAR(10) DEFAULT "en"');
 
         // 6. Create mn_messages table for chat inbox
         await connection.query(`

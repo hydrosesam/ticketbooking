@@ -96,8 +96,34 @@ async function sendText(phone, text) {
 // UI MESSAGES
 // ---------------------------------------------------------
 
-async function sendMNWelcome(phone) {
-    let msg = "🌟 Welcome to Muscat Star Night 2026 – Season 4 🌟\n\n" +
+async function sendMNLanguageSelect(phone) {
+    return sendWhatsAppMessage(phone, {
+        type: "interactive",
+        interactive: {
+            type: "button",
+            body: { text: "Welcome! Please select your preferred language:\n\nസ്വാഗതം! നിങ്ങളുടെ ഭാഷ തിരഞ്ഞെടുക്കുക:" },
+            action: {
+                buttons: [
+                    { type: "reply", reply: { id: "LANG_EN", title: "English" } },
+                    { type: "reply", reply: { id: "LANG_ML", title: "മലയാളം" } }
+                ]
+            }
+        }
+    });
+}
+
+async function sendMNWelcome(phone, lang = 'en') {
+    const isMl = lang === 'ml';
+    let msg = isMl
+        ? "🌟 മസ്‌കറ്റ് സ്റ്റാർ നൈറ്റ് 2026 – സീസൺ 4-ലേക്ക് സ്വാഗതം 🌟\n\n" +
+        "ഈ വർഷത്തെ ഏറ്റവും വലിയ വിനോദ പരിപാടിയിൽ ഞങ്ങളോടൊപ്പം ചേരൂ!\n\n" +
+        "📅 വെള്ളിയാഴ്ച, 10 ഏപ്രിൽ 2026\n" +
+        "🕓 വൈകുന്നേരം 5:00-ന്\n" +
+        "🚪 ഗേറ്റ് തുറക്കുന്നത് - ഉച്ചയ്ക്ക് 3:00-ന്\n" +
+        "📍 മസ്‌കറ്റ് ക്ലബ്, അൽ വാദി കബീർ\n\n" +
+        "സംഗീതവും ഊർജ്ജവും നിറഞ്ഞ അവിസ്മരണീയമായ ഒരു സായാഹ്നത്തിനായി തയ്യാറെടുക്കൂ. 🎧🔥\n\n" +
+        "📞 കൂടുതൽ വിവരങ്ങൾക്ക്: +968 95950347, 90447172"
+        : "🌟 Welcome to Muscat Star Night 2026 – Season 4 🌟\n\n" +
         "Join us for the biggest entertainment night of the year!\n\n" +
         "📅 Friday, 10 April 2026\n" +
         "🕓 5:00 PM\n" +
@@ -119,14 +145,15 @@ async function sendMNWelcome(phone) {
             body: { text: msg },
             action: {
                 buttons: [
-                    { type: "reply", reply: { id: "BTN_MN_BOOK_NOW", title: "Book Now" } }
+                    { type: "reply", reply: { id: "BTN_MN_BOOK_NOW", title: isMl ? "ഇപ്പോൾ ബുക്ക് ചെയ്യുക" : "Book Now" } }
                 ]
             }
         }
     });
 }
 
-async function sendMNCategorySelect(phone) {
+async function sendMNCategorySelect(phone, lang = 'en') {
+    const isMl = lang === 'ml';
     const imageUrl = "https://lh3.googleusercontent.com/d/1avxu1WWjRb6BiBQvWZjnrbIZYrT8o10Q";
 
     // 1. First Send seating layout image (with failover)
@@ -144,20 +171,20 @@ async function sendMNCategorySelect(phone) {
         type: "interactive",
         interactive: {
             type: "list",
-            header: { type: "text", text: "🎟 Select Your Seat" },
-            body: { text: "Choose your category.\n🎫 View layout above." },
+            header: { type: "text", text: isMl ? "🎟 സീറ്റ് തിരഞ്ഞെടുക്കുക" : "🎟 Select Your Seat" },
+            body: { text: isMl ? "നിങ്ങൾ ആഗ്രഹിക്കുന്ന കാറ്റഗറി തിരഞ്ഞെടുക്കുക.\n🎫 ലേഔട്ട് മുകളിൽ കാണാം." : "Choose your category.\n🎫 View layout above." },
             footer: { text: "Music Night Muscat 2026" },
             action: {
-                button: "View Categories",
+                button: isMl ? "കാറ്റഗറികൾ കാണുക" : "View Categories",
                 sections: [
                     {
-                        title: "Available Categories",
+                        title: isMl ? "ലഭ്യമായ കാറ്റഗറികൾ" : "Available Categories",
                         rows: [
-                            { id: "CAT_GUEST", title: "GUEST", description: "OMR 50 | Sofa Seating (2nd & 3rd Row)" },
+                            { id: "CAT_GUEST", title: "GUEST", description: isMl ? "OMR 50 | സോഫാ സീറ്റിംഗ് (2, 3 നിരകൾ)" : "OMR 50 | Sofa Seating (2nd & 3rd Row)" },
                             { id: "CAT_VVIP", title: "VVIP", description: "OMR 20" },
                             { id: "CAT_VIP", title: "VIP", description: "OMR 10" },
                             { id: "CAT_GOLD", title: "GOLD", description: "OMR 5" },
-                            { id: "BTN_BACK", title: "⬅️ BACK", description: "Return to previous step" }
+                            { id: "BTN_BACK", title: isMl ? "⬅️ പിന്നിലേക്ക്" : "⬅️ BACK", description: isMl ? "മുമ്പത്തെ ഘട്ടത്തിലേക്ക് മടങ്ങുക" : "Return to previous step" }
                         ]
                     }
                 ]
@@ -166,15 +193,16 @@ async function sendMNCategorySelect(phone) {
     });
 }
 
-async function sendMNQuantityRequest(phone, category, availableSeats) {
+async function sendMNQuantityRequest(phone, category, availableSeats, lang = 'en') {
+    const isMl = lang === 'ml';
     const rows = [];
     const maxQty = Math.min(9, availableSeats);
 
     for (let i = 1; i <= maxQty; i++) {
         rows.push({
             id: "QTY_" + i,
-            title: i + " Ticket" + (i > 1 ? "s" : ""),
-            description: "Book " + i + " ticket" + (i > 1 ? "s" : "")
+            title: i + (isMl ? " ടിക്കറ്റ്" : " Ticket") + (i > 1 && !isMl ? "s" : ""),
+            description: (isMl ? i + " ടിക്കറ്റ് ബുക്ക് ചെയ്യുക" : "Book " + i + " ticket" + (i > 1 ? "s" : ""))
         });
     }
 
@@ -182,20 +210,20 @@ async function sendMNQuantityRequest(phone, category, availableSeats) {
         type: "interactive",
         interactive: {
             type: "list",
-            header: { type: "text", text: `Select Quantity` },
-            body: { text: `How many tickets?` },
+            header: { type: "text", text: isMl ? "എണ്ണം തിരഞ്ഞെടുക്കുക" : "Select Quantity" },
+            body: { text: isMl ? "എത്ര ടിക്കറ്റുകൾ വേണം?" : "How many tickets?" },
             footer: { text: "Music Night Muscat 2026" },
             action: {
-                button: "Choose Quantity",
+                button: isMl ? "എണ്ണം തിരഞ്ഞെടുക്കുക" : "Choose Quantity",
                 sections: [
                     {
-                        title: "Available Tickets",
+                        title: isMl ? "ലഭ്യമായ ടിക്കറ്റുകൾ" : "Available Tickets",
                         rows: rows
                     },
                     {
-                        title: "Navigation",
+                        title: isMl ? "ക്രമീകരണം" : "Navigation",
                         rows: [
-                            { id: "BTN_BACK", title: "⬅️ BACK", description: "Return to category selection" }
+                            { id: "BTN_BACK", title: isMl ? "⬅️ പിന്നിലേക്ക്" : "⬅️ BACK", description: isMl ? "കാറ്റഗറി തിരഞ്ഞെടുക്കുന്നതിലേക്ക് മടങ്ങുക" : "Return to category selection" }
                         ]
                     }
                 ]
@@ -204,26 +232,40 @@ async function sendMNQuantityRequest(phone, category, availableSeats) {
     });
 }
 
-async function sendMNMemberNameRequest(phone) {
+async function sendMNMemberNameRequest(phone, lang = 'en') {
+    const isMl = lang === 'ml';
     return sendWhatsAppMessage(phone, {
         type: "interactive",
         interactive: {
             type: "button",
-            body: { text: "Kindly Share your name. 😊" },
+            body: { text: isMl ? "ദയവായി നിങ്ങളുടെ പേര് നൽകുക. 😊" : "Kindly Share your name. 😊" },
             action: {
                 buttons: [
-                    { type: "reply", reply: { id: "BTN_BACK", title: "⬅️ BACK" } }
+                    { type: "reply", reply: { id: "BTN_BACK", title: isMl ? "⬅️ പിന്നിലേക്ക്" : "⬅️ BACK" } }
                 ]
             }
         }
     });
 }
 
-async function showMNBookingSummary(phone, bookingData) {
+async function showMNBookingSummary(phone, bookingData, lang = 'en') {
+    const isMl = lang === 'ml';
     let price = getCategoryPrice(bookingData.category);
     let total = price * bookingData.quantity;
 
-    let txt = `🎫 Please Confirm Your Ticket\n` +
+    let txt = isMl
+        ? `🎫 ദയവായി നിങ്ങളുടെ ടിക്കറ്റ് സ്ഥിരീകരിക്കുക\n` +
+        `*മസ്‌കറ്റ് സ്റ്റാർ നൈറ്റ് 2026*\n\n` +
+        `*Booking Summary*\n` +
+        `മസ്‌കറ്റ് സ്റ്റാർ നൈറ്റ് 2026\n\n` +
+        `*🎫 കാറ്റഗറി: ${bookingData.category}*\n` +
+        `*🪑 എണ്ണം: ${bookingData.quantity}*\n` +
+        `*👤 പേര്: ${bookingData.members.join(", ")}*\n` +
+        `*💰 ആകെ തുക: OMR ${total.toFixed(2)}*\n` +
+        `*📅 തീയതി: 10 ഏപ്രിൽ 2026 | 🕓 5:00 PM*\n` +
+        `*📍 സ്ഥലം: മസ്‌കറ്റ് ക്ലബ്, അൽ വാദി കബീർ*\n\n` +
+        `✅ നിങ്ങളുടെ ബുക്കിംഗ് പൂർത്തിയാക്കാൻ ദയവായി സ്ഥിരീകരിക്കുക`
+        : `🎫 Please Confirm Your Ticket\n` +
         `*Muscat STAR Night 2026*\n\n` +
         `*Booking Summary*\n` +
         `Music Night Muscat 2026\n\n` +
@@ -242,9 +284,9 @@ async function showMNBookingSummary(phone, bookingData) {
             body: { text: txt },
             action: {
                 buttons: [
-                    { type: "reply", reply: { id: "MN_PROC_PAYMENT", title: "Confirm & Pay" } },
-                    { type: "reply", reply: { id: "BTN_BACK", title: "⬅️ BACK" } },
-                    { type: "reply", reply: { id: "CANCEL_MN_BOOKING", title: "Cancel" } }
+                    { type: "reply", reply: { id: "MN_PROC_PAYMENT", title: isMl ? "സ്ഥിരീകരിച്ച് പണമടയ്ക്കുക" : "Confirm & Pay" } },
+                    { type: "reply", reply: { id: "BTN_BACK", title: isMl ? "⬅️ പിന്നിലേക്ക്" : "⬅️ BACK" } },
+                    { type: "reply", reply: { id: "CANCEL_MN_BOOKING", title: isMl ? "റദ്ദാക്കുക" : "Cancel" } }
                 ]
             }
         }
@@ -261,13 +303,19 @@ async function getSetting(key, defaultValue = null) {
     }
 }
 
-async function sendMNPaymentRequest(phone) {
+async function sendMNPaymentRequest(phone, lang = 'en') {
+    const isMl = lang === 'ml';
     const paymentQrUrl = await getSetting('payment_qr_url', "https://lh3.googleusercontent.com/d/1j8FkUkKn69dtiFFLD1iwhQ2GSe688VIm");
     const paymentMobile = await getSetting('payment_mobile', "+968 76944041");
 
-    const caption = "💳 *Step 1: Transfer Funds*\n\n" +
+    const caption = isMl
+        ? "💳 *ആദ്യം ക്യാഷ് ട്രാൻസ്ഫർ ചെയ്യുക*\n\n" +
+        `*മൊബൈൽ ട്രാൻസ്ഫർ : ${paymentMobile}*\n\n` +
+        "📸 *ക്യാഷ് അടച്ചതിനു ശേഷം Payment Reciept അപ്‌ലോഡ് ചെയ്യുക*\n\n" +
+        "നിങ്ങളുടെ ടിക്കറ്റ് സ്ഥിരീകരിക്കുന്നതിനായി പണമടച്ചതിന്റെ ഫോട്ടോയോ PDF-ഓ അയക്കുക"
+        : "💳 *Step 1: Transfer Funds*\n\n" +
         `*Mobile Transfer : ${paymentMobile}*\n\n` +
-        "📸 *Step 2: Upload Receipt*\n\n" +
+        "📸 *Step 2: Upload Payment Receipt*\n\n" +
         "Please share a photo or PDF of your payment to confirm your ticket";
 
     try {
@@ -285,10 +333,10 @@ async function sendMNPaymentRequest(phone) {
             type: "interactive",
             interactive: {
                 type: "button",
-                body: { text: "Need to change something? Click Back." },
+                body: { text: isMl ? "എന്തെങ്കിലും മാറ്റണോ? പിന്നിലേക്ക് ക്ലിക്ക് ചെയ്യുക." : "Need to change something? Click Back." },
                 action: {
                     buttons: [
-                        { type: "reply", reply: { id: "BTN_BACK", title: "⬅️ BACK" } }
+                        { type: "reply", reply: { id: "BTN_BACK", title: isMl ? "⬅️ പിന്നിലേക്ക്" : "⬅️ BACK" } }
                     ]
                 }
             }
@@ -302,7 +350,7 @@ async function sendMNPaymentRequest(phone) {
                 body: { text: caption },
                 action: {
                     buttons: [
-                        { type: "reply", reply: { id: "BTN_BACK", title: "⬅️ BACK" } }
+                        { type: "reply", reply: { id: "BTN_BACK", title: isMl ? "⬅️ പിന്നിലേക്ക്" : "⬅️ BACK" } }
                     ]
                 }
             }
@@ -310,7 +358,8 @@ async function sendMNPaymentRequest(phone) {
     }
 }
 
-async function sendMNRestrictedCategoryInfo(phone, text) {
+async function sendMNRestrictedCategoryInfo(phone, text, lang = 'en') {
+    const isMl = lang === 'ml';
     return sendWhatsAppMessage(phone, {
         type: "interactive",
         interactive: {
@@ -318,7 +367,7 @@ async function sendMNRestrictedCategoryInfo(phone, text) {
             body: { text: text },
             action: {
                 buttons: [
-                    { type: "reply", reply: { id: "RESTART", title: "🏠 Main Menu" } }
+                    { type: "reply", reply: { id: "RESTART", title: isMl ? "🏠 പ്രധാന മെനു" : "🏠 Main Menu" } }
                 ]
             }
         }
@@ -354,13 +403,14 @@ async function getUserState(phone) {
     if (rows.length > 0) {
         return {
             state: rows[0].state,
+            language: rows[0].language || 'en',
             category: rows[0].temp_category,
             quantity: rows[0].temp_quantity,
             members: safeJsonParse(rows[0].temp_members)
         };
     }
-    await db.query("INSERT INTO mn_users (phone_number, state) VALUES (?, 'MN_MAIN')", [phone]);
-    return { state: "MN_MAIN", category: null, quantity: null, members: null };
+    await db.query("INSERT INTO mn_users (phone_number, state, language) VALUES (?, 'MN_LANG_SELECT', 'en')", [phone]);
+    return { state: "MN_LANG_SELECT", language: "en", category: null, quantity: null, members: null };
 }
 
 async function saveUserState(phone, state) {
@@ -496,11 +546,10 @@ async function handleMusicNightFlow(phone, event) {
 
     // DISABLED for MN_PAYMENT_UPLOAD state as per user request
     if (currentState !== "MN_PAYMENT_UPLOAD") {
-        if (isResetTrigger || message === "BTN_MUSIC_NIGHT" || currentState === "MN_MAIN") {
+        if (isResetTrigger || message === "BTN_MUSIC_NIGHT" || currentState === "MN_LANG_SELECT" || currentState === "MN_MAIN") {
             console.log(`[FLOW] Global Reset Triggered by ${phone}`);
-            await db.query(`UPDATE mn_users SET temp_category = NULL, temp_quantity = NULL, temp_members = NULL, temp_slip_url = NULL WHERE phone_number = ?`, [phone]);
-            await sendMNWelcome(phone);
-            await saveUserState(phone, "MN_WELCOME_WAIT");
+            await db.query(`UPDATE mn_users SET state = 'MN_LANG_SELECT', temp_category = NULL, temp_quantity = NULL, temp_members = NULL, temp_slip_url = NULL WHERE phone_number = ?`, [phone]);
+            await sendMNLanguageSelect(phone);
             return;
         }
     }
@@ -530,34 +579,35 @@ async function handleMusicNightFlow(phone, event) {
 
     // --- 3. NAVIGATION HANDLERS ---
     if (message === "BTN_MN_BOOK_NOW") {
-        await sendMNCategorySelect(phone);
+        await sendMNCategorySelect(phone, user.language);
         await saveUserState(phone, "MN_CATEGORY_SELECT");
         return;
     }
 
     if (message === "BTN_BACK") {
         console.log(`[FLOW] Back navigation from ${currentState}`);
+        const lang = user.language;
         if (currentState === "MN_CATEGORY_SELECT") {
-            await sendMNWelcome(phone);
+            await sendMNWelcome(phone, lang);
             await saveUserState(phone, "MN_WELCOME_WAIT");
         } else if (currentState === "MN_QUANTITY_INPUT") {
-            await sendMNCategorySelect(phone);
+            await sendMNCategorySelect(phone, lang);
             await saveUserState(phone, "MN_CATEGORY_SELECT");
         } else if (currentState === "MN_MEMBER_NAME") {
             const inv = await db.query("SELECT * FROM mn_inventory WHERE category = ?", [user.category]);
             const available = inv.length > 0 ? (inv[0].total_seats - inv[0].booked_seats) : 10;
-            await sendMNQuantityRequest(phone, user.category, available);
+            await sendMNQuantityRequest(phone, user.category, available, lang);
             await saveUserState(phone, "MN_QUANTITY_INPUT");
         } else if (currentState === "MN_CONFIRM_AWAIT") {
-            await sendMNMemberNameRequest(phone);
+            await sendMNMemberNameRequest(phone, lang);
             await saveUserState(phone, "MN_MEMBER_NAME");
         } else if (currentState === "MN_PAYMENT_UPLOAD") {
             // Remove from abandoned carts if they go back from payment step
             try {
                 await db.query("DELETE FROM mn_abandoned_carts WHERE phone = ?", [phone]);
             } catch (err) { console.error("❌ Failed to remove abandoned cart on back:", err.message); }
-            
-            await showMNBookingSummary(phone, { category: user.category, quantity: user.quantity, members: user.members });
+
+            await showMNBookingSummary(phone, { category: user.category, quantity: user.quantity, members: user.members }, lang);
             await saveUserState(phone, "MN_CONFIRM_AWAIT");
         }
         return;
@@ -570,12 +620,16 @@ async function handleMusicNightFlow(phone, event) {
 
         // Reject other media types
         if (event && event.type && (event.type === 'audio' || event.type === 'video' || event.type === 'voice' || event.type === 'sticker')) {
-            await sendText(phone, "⚠️ *Invalid File Type*\n\nPlease upload only a *Photo* or *PDF* of your payment slip. Audio, video, and stickers are not accepted.");
+            const errorMsg = user.language === 'ml'
+                ? "⚠️ *അസാധുവായ ഫയൽ*\n\nദയവായി നിങ്ങളുടെ പേയ്‌മെന്റ് സ്ലിപ്പിന്റെ *ഫോട്ടോ* അല്ലെങ്കിൽ *PDF* മാത്രം അപ്‌ലോഡ് ചെയ്യുക. ഓഡിയോ, വീഡിയോ, സ്റ്റിക്കറുകൾ എന്നിവ സ്വീകരിക്കില്ല."
+                : "⚠️ *Invalid File Type*\n\nPlease upload only a *Photo* or *PDF* of your payment slip. Audio, video, and stickers are not accepted.";
+            await sendText(phone, errorMsg);
             return;
         }
 
         // Check for media
         if (event && event.type && (event.type === 'image' || event.type === 'document')) {
+            // ... (keep media processing as is)
             const mediaType = event.type;
             const mediaObj = event[mediaType];
             console.log(`[MEDIA] Attempting download of ${mediaType} ID: ${mediaObj.id}`);
@@ -587,64 +641,56 @@ async function handleMusicNightFlow(phone, event) {
 
                 const mimeType = mediaRes.data.mime_type;
                 const fileUrl = mediaRes.data.url;
-                console.log(`[MEDIA] Download URL for ${mediaObj.id}: ${fileUrl.substring(0, 50)}... | Mime: ${mimeType}`);
-
                 const fileRes = await axios.get(fileUrl, {
                     headers: { 'Authorization': `Bearer ${WHATSAPP_ACCESS_TOKEN}` },
                     responseType: 'arraybuffer'
                 });
 
-                // Detect extension properly
-                const extensionMap = {
-                    'application/pdf': 'pdf',
-                    'image/jpeg': 'jpg',
-                    'image/png': 'png',
-                    'image/webp': 'webp',
-                    'image/gif': 'gif'
-                };
-
-                let ext = extensionMap[mimeType] || 'bin';
-                if (ext === 'bin') {
-                    if (mimeType.includes('image')) ext = 'jpg';
-                    else if (mimeType.includes('pdf')) ext = 'pdf';
-                    else if (mediaType === 'image') ext = 'jpg';
-                    else if (mediaType === 'document') ext = 'pdf';
-                }
+                const extensionMap = { 'application/pdf': 'pdf', 'image/jpeg': 'jpg', 'image/png': 'png', 'image/webp': 'webp', 'image/gif': 'gif' };
+                let ext = extensionMap[mimeType] || (mediaType === 'image' ? 'jpg' : 'pdf');
 
                 const fileName = `slip_${mediaObj.id}.${ext}`;
                 const absolutePath = path.join(__dirname, 'uploads', fileName);
-
-                console.log(`[MEDIA] Saving to: ${absolutePath}`);
                 fs.writeFileSync(absolutePath, fileRes.data);
-                console.log(`[MEDIA] File write completed.`);
-
                 localPath = `/uploads/${fileName}`;
             } catch (e) {
                 console.error(`[MEDIA] ERROR processing ${mediaObj.id}:`, e.message);
-                if (e.response) console.error(`[MEDIA] Meta detail:`, JSON.stringify(e.response.data));
             }
         }
 
         if (localPath) {
-            console.log(`[FLOW] Payment proof received. Path: ${localPath}`);
             await saveTempData(phone, 'slip_url', localPath);
             await processPendingBooking(phone, user, localPath, ocrResult);
             return;
         } else if (typeof message === 'string' && message.trim().length > 0) {
-            // Text sent instead of media - Strictly PDF or Image prompt
-            await sendText(phone, "⚠️ Please upload a *photo or PDF* of your payment slip to proceed.");
+            const promptMsg = user.language === 'ml'
+                ? "⚠️ തുടരുന്നതിന് ദയവായി നിങ്ങളുടെ പേയ്‌മെന്റ് സ്ലിപ്പിന്റെ *ഫോട്ടോ അല്ലെങ്കിൽ PDF* അപ്‌ലോഡ് ചെയ്യുക."
+                : "⚠️ Please upload a *photo or PDF* of your payment slip to proceed.";
+            await sendText(phone, promptMsg);
             return;
         }
     }
 
-
     // --- 5. STATE SWITCH ---
     if (typeof message !== 'string' || message.trim() === "") return;
 
+    const lang = user.language;
+    const isMl = lang === 'ml';
+
     switch (currentState) {
+        case "MN_LANG_SELECT":
+            if (message === "LANG_EN" || message === "LANG_ML") {
+                const selectedLang = message === "LANG_ML" ? "ml" : "en";
+                await db.query("UPDATE mn_users SET language = ?, state = 'MN_WELCOME_WAIT' WHERE phone_number = ?", [selectedLang, phone]);
+                await sendMNWelcome(phone, selectedLang);
+            } else {
+                await sendMNLanguageSelect(phone);
+            }
+            break;
+
         case "MN_WELCOME_WAIT":
-            await sendText(phone, "⚠️ *Please use the button above* to proceed.");
-            await sendMNWelcome(phone);
+            await sendText(phone, isMl ? "⚠️ പ്രോസസ്സ് ചെയ്യാൻ മുകളിലുള്ള ബട്ടൺ ഉപയോഗിക്കുക." : "⚠️ *Please use the button above* to proceed.");
+            await sendMNWelcome(phone, lang);
             break;
 
         case "MN_CATEGORY_SELECT":
@@ -653,7 +699,17 @@ async function handleMusicNightFlow(phone, event) {
 
                 // --- CATEGORY RESTRICTION ---
                 if (category === "GUEST") {
-                    let guestTxt = `Muscat Star Night 2026\n\n` +
+                    let guestTxt = isMl
+                        ? `മസ്‌കറ്റ് സ്റ്റാർ നൈറ്റ് 2026\n\n` +
+                        `🎫 കാറ്റഗറി: *ഗസ്റ്റ് (Guest)*\n` +
+                        `💺 ഗസ്റ്റ് ടിക്കറ്റ്: *50 OMR*\n` +
+                        `🛋 സീറ്റിംഗ്: *സോഫാ സീറ്റിംഗ്*\n` +
+                        `📍 നിരകൾ: *2, 3 നിരകൾ*\n` +
+                        `📅 10 ഏപ്രിൽ 2026 | 🕓 *5:00 PM*\n` +
+                        `🚪 ഗേറ്റ് തുറക്കുന്നത്: *3:00 PM*\n` +
+                        `📍 മസ്‌കറ്റ് ക്ലബ്, അൽ വാദി കബീർ\n\n\n` +
+                        `🎫 *നന്ദി! ഞങ്ങളുടെ ടിക്കറ്റിംഗ് ടീം നിങ്ങളെ ഉടൻ ബന്ധപ്പെടും.*`
+                        : `Muscat Star Night 2026\n\n` +
                         `🎫 Category: *Guest*\n` +
                         `💺 Guest Ticket: *50 OMR*\n` +
                         `🛋 Seating: *Sofa Seating*\n` +
@@ -662,33 +718,49 @@ async function handleMusicNightFlow(phone, event) {
                         `🚪 Gate Open : *3:00 PM*\n` +
                         `📍 Muscat Club, Al Wadi Kabir\n\n\n` +
                         `🎫 *Thank you! Our ticketing team will contact you .*`;
-                    await sendMNRestrictedCategoryInfo(phone, guestTxt);
+                    await sendMNRestrictedCategoryInfo(phone, guestTxt, lang);
                     await notifyAdminsOfTierInterest(phone, "GUEST");
                     return;
                 }
 
                 if (category === "VVIP") {
-                    let vvipTxt = `*Muscat Star Night 2026*\n\n` +
+                    let vvipTxt = isMl
+                        ? `*മസ്‌കറ്റ് സ്റ്റാർ നൈറ്റ് 2026*\n\n` +
+                        `🎫 കാറ്റഗറി: *VVIP*\n` +
+                        `💺 VVIP ടിക്കറ്റ്: *20 OMR*\n` +
+                        `📅 10 ഏപ്രിൽ 2026 | 🕓 *4:00 PM*\n` +
+                        `🚪 ഗേറ്റ് തുറക്കുന്നത്: *3:00 PM*\n` +
+                        `📍 മസ്‌കറ്റ് ക്ലബ്, അൽ വാദി കബീർ\n\n\n` +
+                        `🎫 *നന്ദി! ഞങ്ങളുടെ ടിക്കറ്റിംഗ് ടീം നിങ്ങളെ ഉടൻ ബന്ധപ്പെടും.*`
+                        : `*Muscat Star Night 2026*\n\n` +
                         `🎫 Category: *VVIP*\n` +
                         `💺 VVIP Ticket: *20 OMR*\n` +
                         `📅 10 April 2026 | 🕓 *4:00 PM*\n` +
                         `🚪 Gate Open : *3:00 PM*\n` +
                         `📍 Muscat Club, Al Wadi Kabir\n\n\n` +
                         `🎫 *Thank you! Our ticketing team will contact you shortly.*`;
-                    await sendMNRestrictedCategoryInfo(phone, vvipTxt);
+                    await sendMNRestrictedCategoryInfo(phone, vvipTxt, lang);
                     await notifyAdminsOfTierInterest(phone, "VVIP");
                     return;
                 }
 
                 if (category === "VIP") {
-                    let vipTxt = `*Muscat Star Night 2026*\n\n` +
+                    let vipTxt = isMl
+                        ? `*മസ്‌കറ്റ് സ്റ്റാർ നൈറ്റ് 2026*\n\n` +
+                        `🎫 കാറ്റഗറി: *VIP*\n` +
+                        `💺 VIP ടിക്കറ്റ്: *10 OMR*\n` +
+                        `📅 10 ഏപ്രിൽ 2026 | 🕓 *4:00 PM*\n` +
+                        `🚪 ഗേറ്റ് തുറക്കുന്നത്: *3:00 PM*\n` +
+                        `📍 മസ്‌കറ്റ് ക്ലബ്, അൽ വാദി കബീർ\n\n\n` +
+                        `🎫 *നന്ദി! ഞങ്ങളുടെ ടിക്കറ്റിംഗ് ടീം നിങ്ങളെ ഉടൻ ബന്ധപ്പെടും.*`
+                        : `*Muscat Star Night 2026*\n\n` +
                         `🎫 Category: *VIP*\n` +
                         `💺 VIP Ticket: *10 OMR*\n` +
                         `📅 10 April 2026 | 🕓 *4:00 PM*\n` +
                         `🚪 Gate Open : *3:00 PM*\n` +
                         `📍 Muscat Club, Al Wadi Kabir\n\n\n` +
                         `🎫 *Thank you! Our ticketing team will contact you shortly.*`;
-                    await sendMNRestrictedCategoryInfo(phone, vipTxt);
+                    await sendMNRestrictedCategoryInfo(phone, vipTxt, lang);
                     await notifyAdminsOfTierInterest(phone, "VIP");
                     return;
                 }
@@ -698,19 +770,24 @@ async function handleMusicNightFlow(phone, event) {
                 if (invRes.length > 0) {
                     const available = invRes[0].total_seats - invRes[0].booked_seats;
                     if (available <= 0) {
-                        await sendText(phone, `🚫 ${category} is sold out!`);
-                        return await sendMNCategorySelect(phone);
+                        const soldOutMsg = isMl ? `🚫 ${category} വിറ്റുതീർന്നു!` : `🚫 ${category} is sold out!`;
+                        await sendText(phone, soldOutMsg);
+                        return await sendMNCategorySelect(phone, lang);
                     }
                     await saveTempData(phone, 'category', category);
-                    await sendMNQuantityRequest(phone, category, available);
+                    await sendMNQuantityRequest(phone, category, available, lang);
                     await saveUserState(phone, "MN_QUANTITY_INPUT");
                 } else {
-                    await sendText(phone, `⚠️ Sorry, the category *${category}* is currently unavailable. Please choose another.`);
-                    await sendMNCategorySelect(phone);
+                    const unavailMsg = isMl
+                        ? `⚠️ ഖേദിക്കുന്നു, *${category}* ഇപ്പോൾ ലഭ്യമല്ല. ദയവായി മറ്റൊന്ന് തിരഞ്ഞെടുക്കുക.`
+                        : `⚠️ Sorry, the category *${category}* is currently unavailable. Please choose another.`;
+                    await sendText(phone, unavailMsg);
+                    await sendMNCategorySelect(phone, lang);
                 }
             } else {
-                await sendText(phone, "⚠️ *Please select a category* from the list provided.");
-                await sendMNCategorySelect(phone);
+                const selectCatMsg = isMl ? "⚠️ *ദയവായി ഒരു കാറ്റഗറി തിരഞ്ഞെടുക്കുക*." : "⚠️ *Please select a category* from the list provided.";
+                await sendText(phone, selectCatMsg);
+                await sendMNCategorySelect(phone, lang);
             }
             break;
 
@@ -718,46 +795,42 @@ async function handleMusicNightFlow(phone, event) {
             let qty = parseInt(message.replace("QTY_", ""));
             if (!isNaN(qty) && qty > 0) {
                 await saveTempData(phone, 'quantity', qty);
-                await sendMNMemberNameRequest(phone);
+                await sendMNMemberNameRequest(phone, lang);
                 await saveUserState(phone, "MN_MEMBER_NAME");
             } else {
-                await sendText(phone, "⚠️ *Please choose a quantity* from the list.");
+                const chooseQtyMsg = isMl ? "⚠️ *ദയവായി ഒരു എണ്ണം തിരഞ്ഞെടുക്കുക*." : "⚠️ *Please choose a quantity* from the list.";
+                await sendText(phone, chooseQtyMsg);
                 const inv = await db.query("SELECT * FROM mn_inventory WHERE category = ?", [user.category]);
-                await sendMNQuantityRequest(phone, user.category, inv[0].total_seats - inv[0].booked_seats);
+                await sendMNQuantityRequest(phone, user.category, inv[0].total_seats - inv[0].booked_seats, lang);
             }
             break;
 
         case "MN_MEMBER_NAME":
             await saveTempData(phone, 'members', [message]);
-            await showMNBookingSummary(phone, { category: user.category, quantity: user.quantity, members: [message] });
+            await showMNBookingSummary(phone, { category: user.category, quantity: user.quantity, members: [message] }, lang);
             await saveUserState(phone, "MN_CONFIRM_AWAIT");
             break;
 
         case "MN_CONFIRM_AWAIT":
             if (message === "MN_PROC_PAYMENT") {
-                // Log to abandoned carts before showing payment QR
+                // Log to abandoned carts...
                 try {
                     const price = getCategoryPrice(user.category);
                     const total = price * user.quantity;
                     const name = (user.members && user.members.length > 0) ? user.members[0] : "Customer";
-                    
-                    // Use REPLACE to avoid duplicates if they click multiple times
-                    await db.query(
-                        "REPLACE INTO mn_abandoned_carts (phone, name, category, quantity, amount) VALUES (?, ?, ?, ?, ?)",
-                        [phone, name, user.category, user.quantity, total]
-                    );
-                } catch (err) {
-                    console.error("❌ Failed to log abandoned cart:", err.message);
-                }
+                    await db.query("REPLACE INTO mn_abandoned_carts (phone, name, category, quantity, amount) VALUES (?, ?, ?, ?, ?)", [phone, name, user.category, user.quantity, total]);
+                } catch (err) { console.error("❌ Failed to log abandoned cart:", err.message); }
 
-                await sendMNPaymentRequest(phone);
+                await sendMNPaymentRequest(phone, lang);
                 await saveUserState(phone, "MN_PAYMENT_UPLOAD");
             } else if (message === "CANCEL_MN_BOOKING") {
-                await sendText(phone, "❌ Booking cancelled.");
+                const cancelMsg = isMl ? "❌ ബുക്കിംഗ് റദ്ദാക്കി." : "❌ Booking cancelled.";
+                await sendText(phone, cancelMsg);
                 await saveUserState(phone, "MN_MAIN");
             } else {
-                await sendText(phone, "⚠️ *Please use the buttons below*.");
-                await showMNBookingSummary(phone, { category: user.category, quantity: user.quantity, members: user.members });
+                const useBtnMsg = isMl ? "⚠️ *ദയവായി താഴെയുള്ള ബട്ടണുകൾ ഉപയോഗിക്കുക*." : "⚠️ *Please use the buttons below*.";
+                await sendText(phone, useBtnMsg);
+                await showMNBookingSummary(phone, { category: user.category, quantity: user.quantity, members: user.members }, lang);
             }
             break;
     }
@@ -914,6 +987,33 @@ async function authorizeAndSendTicket(bookingNo) {
         }
 
         console.log(`✅ [AUTH] Success for ${bookingNo}`);
+
+        // --- NEW: Send Summary Text Message ---
+        try {
+            const userRows = await db.query("SELECT language FROM mn_users WHERE phone_number = ?", [phone]);
+            const lang = (userRows.length > 0) ? userRows[0].language : 'en';
+            const isMl = lang === 'ml';
+            const name = bookingData.members.join(", ");
+
+            let summaryMsg = isMl
+                ? `🎟 *നിങ്ങളുടെ ടിക്കറ്റ് വിവരങ്ങൾ*\n\n` +
+                `• *ടിക്കറ്റ് നമ്പർ:* ${formattedBookingNo}\n` +
+                `• *പേര്:* ${name}\n` +
+                `• *എണ്ണം:* ${b.quantity}\n` +
+                `• *ആകെ തുക:* OMR ${b.amount}\n\n` +
+                `പ്രവേശനത്തിനായി മുകളിൽ നൽകിയിരിക്കുന്ന PDF-ഉം QR കോഡും സുരക്ഷിതമായി സൂക്ഷിക്കുക. 🎉`
+                : `🎟 *Your Ticket Details*\n\n` +
+                `• *Ticket No:* ${formattedBookingNo}\n` +
+                `• *Name:* ${name}\n` +
+                `• *Quantity:* ${b.quantity}\n` +
+                `• *Total Amount:* OMR ${b.amount}\n\n` +
+                `Please keep the PDF and QR code above safe for entry. 🎉`;
+
+            await sendText(phone, summaryMsg);
+        } catch (msgErr) {
+            console.error("❌ Failed to send summary text:", msgErr.message);
+        }
+
         return { success: true };
 
     } catch (err) {
