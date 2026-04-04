@@ -542,11 +542,9 @@ async function handleMusicNightFlow(phone, event) {
                 isResetTrigger = true;
             }
         }
-    }
-
-    // DISABLED for MN_PAYMENT_UPLOAD state as per user request
+    }    // --- 1.2 RESET LOGIC ---
     if (currentState !== "MN_PAYMENT_UPLOAD") {
-        if (isResetTrigger || message === "BTN_MUSIC_NIGHT" || currentState === "MN_LANG_SELECT" || currentState === "MN_MAIN") {
+        if (isResetTrigger || message === "BTN_MUSIC_NIGHT" || currentState === "MN_MAIN") {
             console.log(`[FLOW] Global Reset Triggered by ${phone}`);
             await db.query(`UPDATE mn_users SET state = 'MN_LANG_SELECT', temp_category = NULL, temp_quantity = NULL, temp_members = NULL, temp_slip_url = NULL WHERE phone_number = ?`, [phone]);
             await sendMNLanguageSelect(phone);
@@ -559,7 +557,6 @@ async function handleMusicNightFlow(phone, event) {
         const isAdmin = (await db.query("SELECT * FROM mn_admins WHERE phone = ? AND is_active = TRUE", [phone])).length > 0;
         if (!isAdmin) return;
 
-        // Parse booking ID (everything after ADM_APP_ or ADM_DENY_)
         const bookingNo = message.replace("ADM_APP_", "").replace("ADM_DENY_", "");
         const booking = await db.query("SELECT payment_status FROM mn_bookings WHERE booking_no = ?", [bookingNo]);
         const currentStatus = booking.length > 0 ? booking[0].payment_status : null;
