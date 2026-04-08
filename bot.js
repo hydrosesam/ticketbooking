@@ -121,7 +121,12 @@ async function sendMNWelcome(phone, lang = 'en') {
         "🕓 വൈകുന്നേരം 5:00-ന്\n" +
         "🚪 ഗേറ്റ് തുറക്കുന്നത് - ഉച്ചയ്ക്ക് 3:00-ന്\n" +
         "📍 മസ്‌കറ്റ് ക്ലബ്, അൽ വാദി കബീർ\n\n" +
-        "സംഗീതവും ഊർജ്ജവും നിറഞ്ഞ അവിസ്മരണീയമായ ഒരു സായാഹ്നത്തിനായി തയ്യാറെടുക്കൂ. 🎧🔥\n\n" +
+        "🎟 *നേരിട്ടുള്ള ടിക്കറ്റുകൾ ഇവിടെയും ലഭ്യമാണ്:*\n" +
+        "• മക്ക ഹൈപ്പർമാർക്കറ്റ്: അൽ സീബ്, അൽ ഗുബ്ര, അൽ ഖുവൈർ\n" +
+        "• ഹെർ സ്റ്റുഡിയോ: സ്റ്റാർസ് സിനിമ, റുവി\n" +
+        "• മസ്‌കറ്റ് ക്ലബ്: അൽ വാദി കബീർ\n" +
+        "• ഡൊമിനോസ്: അൽ ഖൗദ്\n\n" +
+        "📌 *ശ്രദ്ധിക്കുക:* 10 വയസ്സിൽ താഴെയുള്ള കുട്ടികൾക്ക് പ്രവേശനം സൗജന്യമാണ്. 🎧🔥\n\n" +
         "📞 കൂടുതൽ വിവരങ്ങൾക്ക്: +968 95950347, 90447172"
         : "🌟 Welcome to Muscat Star Night 2026 – Season 4 🌟\n\n" +
         "Join us for the biggest entertainment night of the year!\n\n" +
@@ -129,7 +134,12 @@ async function sendMNWelcome(phone, lang = 'en') {
         "🕓 5:00 PM\n" +
         "🚪 Gate Open - 3:00 PM\n" +
         "📍 Muscat Club, Al Wadi Kabir\n\n" +
-        "Get ready for an unforgettable evening of music and energy. 🎧🔥\n\n" +
+        "🎟 *Physical tickets available at:*\n" +
+        "• Makkah Hypermarket: Al Seeb, Al Ghubrah, Al Khuwair\n" +
+        "• Her Studio: Stars cinema, Ruwi\n" +
+        "• Muscat Club: Al Wadi Kabir\n" +
+        "• Domino’s: Al Khoud\n\n" +
+        "📌 *Note:* Children below 10 years can attend free of charge. 🎧🔥\n\n" +
         "📞 More Info: +968 95950347, 90447172";
 
     const imageUrl = "https://lh3.googleusercontent.com/d/11Pwc7Ux7W5XT12jFSDvOQxu1FCIIM27m";
@@ -1014,13 +1024,15 @@ async function authorizeAndSendTicket(bookingNo) {
                 `• *പേര്:* ${name}\n` +
                 `• *എണ്ണം:* ${b.quantity}\n` +
                 `• *ആകെ തുക:* OMR ${b.amount}\n\n` +
-                `പ്രവേശനത്തിനായി മുകളിൽ നൽകിയിരിക്കുന്ന PDF-ഉം QR കോഡും സുരക്ഷിതമായി സൂക്ഷിക്കുക. 🎉`
+                `പ്രവേശനത്തിനായി മുകളിൽ നൽകിയിരിക്കുന്ന PDF-ഉം QR കോഡും സുരക്ഷിതമായി സൂക്ഷിക്കുക. 🎉\n\n` +
+                `📍 *സ്ഥലം (Location):*\nhttps://maps.app.goo.gl/JAtaqXaGpX4sxZ8f7`
                 : `🎟 *Your Ticket Details*\n\n` +
                 `• *Ticket No:* ${formattedBookingNo}\n` +
                 `• *Name:* ${name}\n` +
                 `• *Quantity:* ${b.quantity}\n` +
                 `• *Total Amount:* OMR ${b.amount}\n\n` +
-                `Please keep the PDF and QR code above safe for entry. 🎉`;
+                `Please keep the PDF and QR code above safe for entry. 🎉\n\n` +
+                `📍 *Event Location:* \nhttps://maps.app.goo.gl/JAtaqXaGpX4sxZ8f7`;
 
             await sendText(phone, summaryMsg);
         } catch (msgErr) {
