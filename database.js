@@ -146,6 +146,25 @@ async function initDatabase() {
         await addColumn('mn_bookings', 'bank_mobile', 'VARCHAR(20) DEFAULT NULL');
         await addColumn('mn_users', 'language', 'VARCHAR(10) DEFAULT "en"');
 
+        // Performance Indexes
+        const addIndex = async (table, indexName, columns) => {
+            try {
+                await connection.query(`CREATE INDEX ${indexName} ON ${table} (${columns})`);
+                console.log(`✅ Migration: Added index ${indexName} to ${table}`);
+            } catch (e) {
+                // Silently skip if index already exists
+                const isDup = e.code === 'ER_DUP_KEYNAME' || (e.message && e.message.includes('Duplicate key'));
+                if (!isDup) {
+                    console.error(`❌ Index error (${indexName}):`, e.message);
+                }
+            }
+        };
+
+        await addIndex('mn_messages', 'idx_msg_phone_time', 'phone, timestamp DESC');
+        await addIndex('mn_messages', 'idx_msg_unread', 'phone, direction, is_read');
+        await addIndex('mn_bookings', 'idx_booking_payment', 'payment_status, timestamp DESC');
+        await addIndex('mn_bookings', 'idx_booking_entry', 'entry_status, timestamp DESC');
+
         // 6. Create mn_messages table for chat inbox
         await connection.query(`
             CREATE TABLE IF NOT EXISTS mn_messages (
