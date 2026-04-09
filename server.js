@@ -1681,27 +1681,27 @@ app.get('/dashboard', requireAuth, async (req, res) => {
             } catch(e) {}
         }
 
-        async function loadConversations(append = false) {
+        var _convLoading = false;
+
+        async function loadConversations(append) {
+            if (_convLoading) return;
             var list = document.getElementById('conversations-list');
             if (!list) return;
 
-            // Show cached data instantly on first load
-            if (!append && conversationsOffset === 0) {
+            if (!append) {
+                conversationsOffset = 0;
+                // Show cached data instantly
                 var cached = localStorage.getItem('inbox_conversations');
                 if (cached) {
-                    try {
-                        var cachedData = JSON.parse(cached);
-                        renderConversationList(cachedData, list, false);
-                    } catch(e) {}
+                    try { renderConversationList(JSON.parse(cached), list, false); } catch(e) {}
                 }
             }
 
+            _convLoading = true;
             try {
-                if (!append) conversationsOffset = 0;
                 var res = await fetch('/admin/inbox/conversations?limit=' + conversationsLimit + '&offset=' + conversationsOffset);
                 var data = await res.json();
 
-                // Cache fresh data for instant loading next time
                 if (!append) {
                     try { localStorage.setItem('inbox_conversations', JSON.stringify(data)); } catch(e) {}
                 }
@@ -1710,16 +1710,24 @@ app.get('/dashboard', requireAuth, async (req, res) => {
             } catch (e) {
                 console.error("Failed to load conversations:", e);
             }
+            _convLoading = false;
+        }
+
+        function loadMoreContacts() {
+            var btn = document.getElementById('btn-load-more-convs');
+            if (btn) { btn.innerText = 'Loading...'; btn.style.pointerEvents = 'none'; }
+            conversationsOffset += conversationsLimit;
+            loadConversations(true);
         }
 
         function renderConversationList(data, list, append) {
-            // Remove old "Load More" button if it exists
+            // Remove old "Load More" button
             var oldBtn = document.getElementById('btn-load-more-convs');
             if (oldBtn) oldBtn.remove();
 
             if (!append) {
                 list.innerHTML = '';
-                if (data.length === 0) {
+                if (!data || data.length === 0) {
                     list.innerHTML = '<div style="padding:40px; text-align:center; color:#94a3b8;">No messages yet.</div>';
                     return;
                 }
@@ -1752,16 +1760,9 @@ app.get('/dashboard', requireAuth, async (req, res) => {
             });
 
             if (data.length >= conversationsLimit) {
-                var moreBtn = document.createElement('div');
-                moreBtn.id = 'btn-load-more-convs';
-                moreBtn.style = 'padding:15px; text-align:center; cursor:pointer; color:var(--primary); font-weight:800; font-size:13px; border-top:1px solid #f1f5f9;';
-                moreBtn.innerText = 'LOAD MORE CONTACTS (20)';
-                moreBtn.onclick = function(e) {
-                    e.stopPropagation();
-                    conversationsOffset += conversationsLimit;
-                    loadConversations(true);
-                };
-                list.appendChild(moreBtn);
+                list.insertAdjacentHTML('beforeend', 
+                    '<div id="btn-load-more-convs" onclick="loadMoreContacts()" style="padding:15px; text-align:center; cursor:pointer; color:var(--primary); font-weight:800; font-size:13px; border-top:1px solid #f1f5f9;">LOAD MORE CONTACTS (20)</div>'
+                );
             }
         }
 
