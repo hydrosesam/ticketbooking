@@ -202,9 +202,11 @@ app.post('/admin/delete', requireAuth, async (req, res) => {
 // Inbox API Endpoints
 // ======================================
 
-// Get all unique conversations (latest message per phone)
+// Get all unique conversations (latest message per phone) with pagination
 app.get('/admin/inbox/conversations', requireAuth, async (req, res) => {
     try {
+        const limit = parseInt(req.query.limit) || 20;
+        const offset = parseInt(req.query.offset) || 0;
         const rows = await db.query(`
             SELECT m1.*, u.temp_members,
                    (SELECT COUNT(*) FROM mn_messages m3
@@ -216,7 +218,8 @@ app.get('/admin/inbox/conversations', requireAuth, async (req, res) => {
                 ON m1.phone = u.phone_number
             WHERE m2.id IS NULL
             ORDER BY m1.timestamp DESC
-        `);
+            LIMIT ? OFFSET ?
+        `, [limit, offset]);
         res.json(rows);
     } catch (err) {
         console.error("Inbox converstations error:", err);
@@ -282,8 +285,8 @@ app.get('/admin/inbox/messages/:phone', requireAuth, async (req, res) => {
         const limit = parseInt(req.query.limit) || 20;
         const offset = parseInt(req.query.offset) || 0;
         const rows = await db.query(
-            `SELECT * FROM mn_messages WHERE phone = ? ORDER BY timestamp DESC LIMIT ${limit} OFFSET ${offset}`,
-            [req.params.phone]
+            "SELECT * FROM mn_messages WHERE phone = ? ORDER BY timestamp DESC LIMIT ? OFFSET ?",
+            [req.params.phone, limit, offset]
         );
         // Return latest messages first in DESC, frontend will reverse them for display
         res.json(rows);
@@ -1556,6 +1559,8 @@ app.get('/dashboard', requireAuth, async (req, res) => {
         var activeChatPhone = null;
         var chatOffset = 0;
         var chatLimit = 20;
+        var conversationsOffset = 0;
+        var conversationsLimit = 20;
 
         function renderMessageBubble(msg) {
             var time = new Date(msg.timestamp).toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'});
@@ -1653,18 +1658,25 @@ app.get('/dashboard', requireAuth, async (req, res) => {
             } catch(e) {}
         }
 
-        async function loadConversations() {
+        async function loadConversations(append = false) {
             try {
-                var res = await fetch('/admin/inbox/conversations');
+                if (!append) conversationsOffset = 0;
+                var res = await fetch('/admin/inbox/conversations?limit=' + conversationsLimit + '&offset=' + conversationsOffset);
                 var data = await res.json();
                 var list = document.getElementById('conversations-list');
 
                 if (!list) return;
-                list.innerHTML = '';
                 
-                if (data.length === 0) {
-                    list.innerHTML = '<div style="padding:40px; text-align:center; color:#94a3b8;">No messages yet.</div>';
-                    return;
+                // Remove old "Load More" button if it exists
+                var oldBtn = document.getElementById('btn-load-more-convs');
+                if (oldBtn) oldBtn.remove();
+
+                if (!append) {
+                    list.innerHTML = '';
+                    if (data.length === 0) {
+                        list.innerHTML = '<div style="padding:40px; text-align:center; color:#94a3b8;">No messages yet.</div>';
+                        return;
+                    }
                 }
 
                 data.forEach(function(conv) {
@@ -1679,7 +1691,7 @@ app.get('/dashboard', requireAuth, async (req, res) => {
                     var nameDisplay = conv.phone;
                     try {
                         if (conv.temp_members) {
-                            var members = JSON.parse(conv.temp_members);
+                            var members = typeof conv.temp_members === 'string' ? JSON.parse(conv.temp_members) : conv.temp_members;
                             if (members && members.length > 0) nameDisplay = members[0] + ' (' + conv.phone + ')';
                         }
                     } catch(e) {}
@@ -1692,6 +1704,19 @@ app.get('/dashboard', requireAuth, async (req, res) => {
                     el.onclick = function() { openChat(conv.phone, nameDisplay); };
                     list.appendChild(el);
                 });
+
+                if (data.length >= conversationsLimit) {
+                    var moreBtn = document.createElement('div');
+                    moreBtn.id = 'btn-load-more-convs';
+                    moreBtn.style = 'padding:15px; text-align:center; cursor:pointer; color:var(--primary); font-weight:800; font-size:13px; border-top:1px solid #f1f5f9;';
+                    moreBtn.innerText = 'LOAD MORE CONTACTS (20)';
+                    moreBtn.onclick = function(e) {
+                        e.stopPropagation();
+                        conversationsOffset += conversationsLimit;
+                        loadConversations(true);
+                    };
+                    list.appendChild(moreBtn);
+                }
             } catch (e) {
                 console.error("Failed to load conversations:", e);
             }
