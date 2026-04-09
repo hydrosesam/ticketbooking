@@ -276,13 +276,16 @@ app.get('/admin/inbox/export-csv', requireAuth, async (req, res) => {
     }
 });
 
-// Get message history for a specific phone number
+// Get message history for a specific phone number (with pagination)
 app.get('/admin/inbox/messages/:phone', requireAuth, async (req, res) => {
     try {
+        const limit = parseInt(req.query.limit) || 20;
+        const offset = parseInt(req.query.offset) || 0;
         const rows = await db.query(
-            "SELECT * FROM mn_messages WHERE phone = ? ORDER BY timestamp ASC",
-            [req.params.phone]
+            "SELECT * FROM mn_messages WHERE phone = ? ORDER BY timestamp DESC LIMIT ? OFFSET ?",
+            [req.params.phone, limit, offset]
         );
+        // Return latest messages first in DESC, frontend will reverse them for display
         res.json(rows);
     } catch (err) {
         res.status(500).json({ error: err.message });
@@ -1551,6 +1554,73 @@ app.get('/dashboard', requireAuth, async (req, res) => {
 
         // --- Inbox Logic ---
         var activeChatPhone = null;
+        var chatOffset = 0;
+        var chatLimit = 20;
+
+        function renderMessageBubble(msg) {
+            var time = new Date(msg.timestamp).toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'});
+            var typeClass = msg.direction === 'inbound' ? 'msg-inbound' : 'msg-outbound';
+            
+            var content = msg.content || '';
+            if (msg.message_type === 'image' && msg.media_url) {
+                content = '<a href="' + msg.media_url + '" target="_blank" style="color:inherit; text-decoration:underline;">[View Image]</a><br>' + content;
+            } else if (msg.message_type === 'document' && msg.media_url) {
+                 content = '<a href="' + msg.media_url + '" target="_blank" style="color:inherit; text-decoration:underline;">[Download Document]</a><br>' + content;
+            }
+
+            return '<div class="msg-bubble ' + typeClass + '">' +
+                        content +
+                        '<span class="msg-time">' + time + '</span>' +
+                        '</div>';
+        }
+
+        async function loadPreviousMessages() {
+            var btn = document.getElementById('btn-load-more');
+            if (!btn || !activeChatPhone) return;
+            
+            btn.disabled = true;
+            btn.innerText = 'Loading...';
+            
+            chatOffset += chatLimit;
+            try {
+                var res = await fetch('/admin/inbox/messages/' + activeChatPhone + '?limit=' + chatLimit + '&offset=' + chatOffset);
+                var messages = await res.json();
+                
+                var chatBox = document.getElementById('chat-messages');
+                var oldHeight = chatBox.scrollHeight;
+
+                if (messages.length === 0) {
+                    btn.style.display = 'none';
+                    return;
+                }
+
+                // Messages arrive DESC (latest first). To prepend in order, we reverse to ASC.
+                var newHtml = '';
+                messages.reverse().forEach(function(msg) {
+                    newHtml += renderMessageBubble(msg);
+                });
+
+                var tempDiv = document.createElement('div');
+                tempDiv.innerHTML = newHtml;
+                // Insert after the button
+                while (tempDiv.firstChild) {
+                    chatBox.insertBefore(tempDiv.firstChild, btn.nextSibling);
+                }
+
+                // Adjust scroll to maintain position
+                chatBox.scrollTop = chatBox.scrollHeight - oldHeight;
+                
+                if (messages.length < chatLimit) btn.style.display = 'none';
+                else {
+                    btn.disabled = false;
+                    btn.innerText = 'Load Previous (20)';
+                }
+            } catch (e) {
+                console.error("Load previous error", e);
+                btn.disabled = false;
+                btn.innerText = 'Retry Load';
+            }
+        }
 
         // Connect to Socket.IO server for real-time updates
         var socket = io();
@@ -1560,14 +1630,12 @@ app.get('/dashboard', requireAuth, async (req, res) => {
 
             // If this message is for the currently open chat, append it immediately
             if (activeChatPhone && msg.phone === activeChatPhone) {
-                var typeClass = msg.direction === 'inbound' ? 'msg-inbound' : 'msg-outbound';
-                var time = new Date(msg.timestamp).toLocaleTimeString([], {hour:'2-digit', minute:'2-digit'});
-                var bubble = document.createElement('div');
-                bubble.className = 'msg-bubble ' + typeClass;
-                bubble.innerHTML = (msg.content || '') + '<span class="msg-time">' + time + '</span>';
                 var chatBox = document.getElementById('chat-messages');
                 if (chatBox) {
-                    chatBox.appendChild(bubble);
+                    var bubbleHtml = renderMessageBubble(msg);
+                    var tempDiv = document.createElement('div');
+                    tempDiv.innerHTML = bubbleHtml;
+                    chatBox.appendChild(tempDiv.firstChild);
                     chatBox.scrollTop = chatBox.scrollHeight;
                     // Auto mark-read since user is viewing this conversation
                     if (msg.direction === 'inbound') markRead(activeChatPhone);
@@ -1734,6 +1802,7 @@ app.get('/dashboard', requireAuth, async (req, res) => {
             showTab('inbox', inboxNav);
 
             activeChatPhone = phone;
+            chatOffset = 0;
             document.getElementById('chat-empty').style.display = 'none';
             document.getElementById('chat-area').style.display = 'flex';
             document.getElementById('chat-header-name').innerText = nameDisplay || phone;
@@ -1750,25 +1819,17 @@ app.get('/dashboard', requireAuth, async (req, res) => {
             loadConversations();
 
             try {
-                var res = await fetch('/admin/inbox/messages/' + phone);
+                var res = await fetch('/admin/inbox/messages/' + phone + '?limit=' + chatLimit + '&offset=0');
                 var messages = await res.json();
                 
                 var chatHtml = '';
-                messages.forEach(function(msg) {
-                    var time = new Date(msg.timestamp).toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'});
-                    var typeClass = msg.direction === 'inbound' ? 'msg-inbound' : 'msg-outbound';
-                    
-                    var content = msg.content;
-                    if (msg.message_type === 'image' && msg.media_url) {
-                        content = '<a href="' + msg.media_url + '" target="_blank" style="color:inherit; text-decoration:underline;">[View Image]</a><br>' + content;
-                    } else if (msg.message_type === 'document' && msg.media_url) {
-                         content = '<a href="' + msg.media_url + '" target="_blank" style="color:inherit; text-decoration:underline;">[Download Document]</a><br>' + content;
-                    }
+                if (messages.length >= chatLimit) {
+                    chatHtml += '<button id="btn-load-more" class="page-btn" style="width:100%; margin-bottom:20px;" onclick="loadPreviousMessages()">Load Previous (20)</button>';
+                }
 
-                    chatHtml += '<div class="msg-bubble ' + typeClass + '">' +
-                                content +
-                                '<span class="msg-time">' + time + '</span>' +
-                                '</div>';
+                // Messages are DESC from API, reverse to ASC for display
+                messages.reverse().forEach(function(msg) {
+                    chatHtml += renderMessageBubble(msg);
                 });
                 
                 var chatBox = document.getElementById('chat-messages');
