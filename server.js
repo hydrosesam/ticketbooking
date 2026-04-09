@@ -1644,6 +1644,7 @@ app.get('/dashboard', requireAuth, async (req, res) => {
                 }
             } catch (e) {
                 console.error("[Inbox] Load previous error:", e);
+                alert("Error loading messages: " + e.message);
                 btn.disabled = false;
                 btn.innerText = 'Retry Load';
             }
@@ -1741,6 +1742,7 @@ app.get('/dashboard', requireAuth, async (req, res) => {
                 }
             } catch (e) {
                 console.error("Failed to load conversations:", e);
+                alert("Error loading contacts: " + e.message);
             }
         }
 
@@ -1852,7 +1854,7 @@ app.get('/dashboard', requireAuth, async (req, res) => {
             chatOffset = 0;
             document.getElementById('chat-empty').style.display = 'none';
             document.getElementById('chat-area').style.display = 'flex';
-            document.getElementById('chat-header-name').innerText = nameDisplay || phone;
+            document.getElementById('chat-header-name').innerText = (nameDisplay || phone) + " (v1.1)";
             document.getElementById('chat-messages').innerHTML = '<div style="text-align:center; padding:20px; color:#94a3b8;">Loading...</div>';
             
             // Highlight selected
