@@ -282,8 +282,8 @@ app.get('/admin/inbox/messages/:phone', requireAuth, async (req, res) => {
         const limit = parseInt(req.query.limit) || 20;
         const offset = parseInt(req.query.offset) || 0;
         const rows = await db.query(
-            "SELECT * FROM mn_messages WHERE phone = ? ORDER BY timestamp DESC LIMIT ? OFFSET ?",
-            [req.params.phone, limit, offset]
+            `SELECT * FROM mn_messages WHERE phone = ? ORDER BY timestamp DESC LIMIT ${limit} OFFSET ${offset}`,
+            [req.params.phone]
         );
         // Return latest messages first in DESC, frontend will reverse them for display
         res.json(rows);
@@ -1589,7 +1589,7 @@ app.get('/dashboard', requireAuth, async (req, res) => {
                 var chatBox = document.getElementById('chat-messages');
                 var oldHeight = chatBox.scrollHeight;
 
-                if (messages.length === 0) {
+                if (!Array.isArray(messages) || messages.length === 0) {
                     btn.style.display = 'none';
                     return;
                 }
@@ -1823,14 +1823,18 @@ app.get('/dashboard', requireAuth, async (req, res) => {
                 var messages = await res.json();
                 
                 var chatHtml = '';
-                if (messages.length >= chatLimit) {
-                    chatHtml += '<button id="btn-load-more" class="page-btn" style="width:100%; margin-bottom:20px;" onclick="loadPreviousMessages()">Load Previous (20)</button>';
-                }
+                if (Array.isArray(messages)) {
+                    if (messages.length >= chatLimit) {
+                        chatHtml += '<button id="btn-load-more" class="page-btn" style="width:100%; margin-bottom:20px;" onclick="loadPreviousMessages()">Load Previous (20)</button>';
+                    }
 
-                // Messages are DESC from API, reverse to ASC for display
-                messages.reverse().forEach(function(msg) {
-                    chatHtml += renderMessageBubble(msg);
-                });
+                    // Messages are DESC from API, reverse to ASC for display
+                    messages.reverse().forEach(function(msg) {
+                        chatHtml += renderMessageBubble(msg);
+                    });
+                } else {
+                    chatHtml = '<div style="text-align:center; padding:20px; color:var(--danger);">Error: ' + (messages.error || 'Failed to load messages') + '</div>';
+                }
                 
                 var chatBox = document.getElementById('chat-messages');
                 chatBox.innerHTML = chatHtml;
