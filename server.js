@@ -361,7 +361,7 @@ app.post('/admin/settings/update', requireAuth, async (req, res) => {
 // ======================================
 app.get('/admin/enquiries', requireAuth, async (req, res) => {
     try {
-        const rows = await db.query("SELECT * FROM mn_enquiries ORDER BY timestamp DESC");
+        const rows = await db.query("SELECT * FROM mn_enquiries ORDER BY timestamp DESC LIMIT 50");
         res.json(rows);
     } catch (err) {
         res.status(500).json({ error: err.message });
@@ -370,7 +370,7 @@ app.get('/admin/enquiries', requireAuth, async (req, res) => {
 
 app.get('/admin/abandoned', requireAuth, async (req, res) => {
     try {
-        const rows = await db.query("SELECT * FROM mn_abandoned_carts ORDER BY timestamp DESC");
+        const rows = await db.query("SELECT * FROM mn_abandoned_carts ORDER BY timestamp DESC LIMIT 50");
         res.json(rows);
     } catch (err) {
         res.status(500).json({ error: err.message });
@@ -430,6 +430,30 @@ app.post('/admin/settings/upload-qr', requireAuth, upload.single('qr_image'), as
     try {
         await db.query("INSERT INTO mn_settings (setting_key, setting_value) VALUES (?, ?) ON DUPLICATE KEY UPDATE setting_value = VALUES(setting_value)", ['payment_qr_url', fileUrl]);
         res.json({ success: true, url: fileUrl });
+    } catch (err) {
+        res.status(500).json({ error: err.message });
+    }
+});
+
+// API: Get paginated bookings for dashboard tabs
+app.get('/admin/bookings/list', requireAuth, async (req, res) => {
+    const { type, limit = 50, offset = 0 } = req.query;
+    let where = "1=1";
+    if (type === 'pending') where = "payment_status = 'pending'";
+    else if (type === 'approved') where = "payment_status = 'approved'";
+    else if (type === 'verified') where = "entry_status IS NOT NULL";
+
+    let orderBy = "timestamp DESC";
+    if (type === 'verified') orderBy = "entry_status DESC";
+
+    try {
+        const rows = await db.query(`
+            SELECT * FROM mn_bookings 
+            WHERE ${where} 
+            ORDER BY ${orderBy} 
+            LIMIT ? OFFSET ?
+        `, [parseInt(limit), parseInt(offset)]);
+        res.json(rows);
     } catch (err) {
         res.status(500).json({ error: err.message });
     }
@@ -525,25 +549,34 @@ app.post('/webhook', async (req, res) => {
 app.get('/dashboard', requireAuth, async (req, res) => {
     try {
         const inventoryRows = await db.query("SELECT * FROM mn_inventory");
-        const bookingRows = await db.query("SELECT * FROM mn_bookings ORDER BY timestamp DESC");
-        const pendingRows = await db.query("SELECT * FROM mn_bookings WHERE payment_status = 'pending' ORDER BY timestamp DESC");
-        const approvedRows = await db.query("SELECT * FROM mn_bookings WHERE payment_status = 'approved' ORDER BY timestamp DESC");
-        const verifiedRows = await db.query("SELECT * FROM mn_bookings WHERE entry_status IS NOT NULL ORDER BY entry_status DESC");
+        
+        // Optimized summary stats (do the math in the database)
+        const stats = await db.query(`
+            SELECT 
+                SUM(amount) as total_revenue,
+                SUM(CASE WHEN payment_status = 'approved' THEN amount ELSE 0 END) as collected,
+                SUM(CASE WHEN payment_status != 'approved' THEN amount ELSE 0 END) as receivable
+            FROM mn_bookings
+        `);
+        
+        const totalRevenue = parseFloat(stats[0].total_revenue || 0);
+        const collected = parseFloat(stats[0].collected || 0);
+        const receivable = parseFloat(stats[0].receivable || 0);
+
+        // Limit initial table data to latest 100 per tab for speed
+        const limit = 100;
+        const bookingRows = await db.query("SELECT * FROM mn_bookings ORDER BY timestamp DESC LIMIT ?", [limit]);
+        const pendingRows = await db.query("SELECT * FROM mn_bookings WHERE payment_status = 'pending' ORDER BY timestamp DESC LIMIT ?", [limit]);
+        const approvedRows = await db.query("SELECT * FROM mn_bookings WHERE payment_status = 'approved' ORDER BY timestamp DESC LIMIT ?", [limit]);
+        const verifiedRows = await db.query("SELECT * FROM mn_bookings WHERE entry_status IS NOT NULL ORDER BY entry_status DESC LIMIT ?", [limit]);
         const adminRows = await db.query("SELECT * FROM mn_admins ORDER BY created_at DESC");
 
         const formatOmanTime = (date) => {
             if (!date) return '-';
-            // If it's a string from MySQL (e.g. "2026-02-26 02:00:00"), 
-            // append ' UTC' to force JS to treat it as UTC.
             const d = typeof date === 'string' && !date.includes('Z') && !date.includes('+') ? new Date(date + ' UTC') : new Date(date);
             return d.toLocaleString('en-GB', {
-                timeZone: 'Asia/Muscat',
-                day: '2-digit',
-                month: 'short',
-                year: 'numeric',
-                hour: '2-digit',
-                minute: '2-digit',
-                hour12: true
+                timeZone: 'Asia/Muscat', day: '2-digit', month: 'short', year: 'numeric',
+                hour: '2-digit', minute: '2-digit', hour12: true
             });
         };
 
@@ -555,19 +588,7 @@ app.get('/dashboard', requireAuth, async (req, res) => {
         const admin = req.admin;
         const isAdmin = admin.role === 'admin';
 
-        let totalRevenue = 0;
-        let collected = 0;
-        let receivable = 0;
-
-        if (isAdmin) {
-            bookingRows.forEach(b => {
-                totalRevenue += parseFloat(b.amount || 0);
-                if (b.payment_status === 'approved') collected += parseFloat(b.amount || 0);
-                else receivable += parseFloat(b.amount || 0);
-            });
-        }
-
-        // Create a map to detect duplicate Bank Transaction IDs
+        // Check for duplicate Bank Transaction IDs (Only for the visible rows)
         const txIdMap = {};
         bookingRows.forEach(b => {
             if (b.bank_transaction_id) {
