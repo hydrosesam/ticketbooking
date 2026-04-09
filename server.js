@@ -1682,67 +1682,86 @@ app.get('/dashboard', requireAuth, async (req, res) => {
         }
 
         async function loadConversations(append = false) {
+            var list = document.getElementById('conversations-list');
+            if (!list) return;
+
+            // Show cached data instantly on first load
+            if (!append && conversationsOffset === 0) {
+                var cached = localStorage.getItem('inbox_conversations');
+                if (cached) {
+                    try {
+                        var cachedData = JSON.parse(cached);
+                        renderConversationList(cachedData, list, false);
+                    } catch(e) {}
+                }
+            }
+
             try {
                 if (!append) conversationsOffset = 0;
                 var res = await fetch('/admin/inbox/conversations?limit=' + conversationsLimit + '&offset=' + conversationsOffset);
                 var data = await res.json();
-                var list = document.getElementById('conversations-list');
 
-                if (!list) return;
-                
-                // Remove old "Load More" button if it exists
-                var oldBtn = document.getElementById('btn-load-more-convs');
-                if (oldBtn) oldBtn.remove();
-
+                // Cache fresh data for instant loading next time
                 if (!append) {
-                    list.innerHTML = '';
-                    if (data.length === 0) {
-                        list.innerHTML = '<div style="padding:40px; text-align:center; color:#94a3b8;">No messages yet.</div>';
-                        return;
-                    }
+                    try { localStorage.setItem('inbox_conversations', JSON.stringify(data)); } catch(e) {}
                 }
 
-                data.forEach(function(conv) {
-                    var el = document.createElement('div');
-                    el.className = 'conversation-item';
-                    el.setAttribute('data-phone', conv.phone);
-                    if (conv.phone === activeChatPhone) el.classList.add('active');
-                    
-                    var time = new Date(conv.timestamp).toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'});
-                    var preview = conv.message_type === 'text' ? (conv.content || '') : '[' + conv.message_type + ']';
-                    var unread = parseInt(conv.unread_count || 0);
-                    var nameDisplay = conv.phone;
-                    try {
-                        if (conv.temp_members) {
-                            var members = typeof conv.temp_members === 'string' ? JSON.parse(conv.temp_members) : conv.temp_members;
-                            if (members && members.length > 0) nameDisplay = members[0] + ' (' + conv.phone + ')';
-                        }
-                    } catch(e) {}
-
-                    var badgeHtml = unread > 0 ? '<span class="unread-badge">' + unread + '</span>' : '';
-                    el.innerHTML = '<span class="conversation-time">' + time + '</span>' +
-                                   '<div class="conversation-phone">' + nameDisplay + badgeHtml + '</div>' +
-                                   '<div class="conversation-preview">' + preview + '</div>';
-                                   
-                    el.onclick = function() { openChat(conv.phone, nameDisplay); };
-                    list.appendChild(el);
-                });
-
-                if (data.length >= conversationsLimit) {
-                    var moreBtn = document.createElement('div');
-                    moreBtn.id = 'btn-load-more-convs';
-                    moreBtn.style = 'padding:15px; text-align:center; cursor:pointer; color:var(--primary); font-weight:800; font-size:13px; border-top:1px solid #f1f5f9;';
-                    moreBtn.innerText = 'LOAD MORE CONTACTS (20)';
-                    moreBtn.onclick = function(e) {
-                        e.stopPropagation();
-                        conversationsOffset += conversationsLimit;
-                        loadConversations(true);
-                    };
-                    list.appendChild(moreBtn);
-                }
+                renderConversationList(data, list, append);
             } catch (e) {
                 console.error("Failed to load conversations:", e);
-                alert("Error loading contacts: " + e.message);
+            }
+        }
+
+        function renderConversationList(data, list, append) {
+            // Remove old "Load More" button if it exists
+            var oldBtn = document.getElementById('btn-load-more-convs');
+            if (oldBtn) oldBtn.remove();
+
+            if (!append) {
+                list.innerHTML = '';
+                if (data.length === 0) {
+                    list.innerHTML = '<div style="padding:40px; text-align:center; color:#94a3b8;">No messages yet.</div>';
+                    return;
+                }
+            }
+
+            data.forEach(function(conv) {
+                var el = document.createElement('div');
+                el.className = 'conversation-item';
+                el.setAttribute('data-phone', conv.phone);
+                if (conv.phone === activeChatPhone) el.classList.add('active');
+                
+                var time = new Date(conv.timestamp).toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'});
+                var preview = conv.message_type === 'text' ? (conv.content || '') : '[' + conv.message_type + ']';
+                var unread = parseInt(conv.unread_count || 0);
+                var nameDisplay = conv.phone;
+                try {
+                    if (conv.temp_members) {
+                        var members = typeof conv.temp_members === 'string' ? JSON.parse(conv.temp_members) : conv.temp_members;
+                        if (members && members.length > 0) nameDisplay = members[0] + ' (' + conv.phone + ')';
+                    }
+                } catch(e) {}
+
+                var badgeHtml = unread > 0 ? '<span class="unread-badge">' + unread + '</span>' : '';
+                el.innerHTML = '<span class="conversation-time">' + time + '</span>' +
+                               '<div class="conversation-phone">' + nameDisplay + badgeHtml + '</div>' +
+                               '<div class="conversation-preview">' + preview + '</div>';
+                               
+                el.onclick = function() { openChat(conv.phone, nameDisplay); };
+                list.appendChild(el);
+            });
+
+            if (data.length >= conversationsLimit) {
+                var moreBtn = document.createElement('div');
+                moreBtn.id = 'btn-load-more-convs';
+                moreBtn.style = 'padding:15px; text-align:center; cursor:pointer; color:var(--primary); font-weight:800; font-size:13px; border-top:1px solid #f1f5f9;';
+                moreBtn.innerText = 'LOAD MORE CONTACTS (20)';
+                moreBtn.onclick = function(e) {
+                    e.stopPropagation();
+                    conversationsOffset += conversationsLimit;
+                    loadConversations(true);
+                };
+                list.appendChild(moreBtn);
             }
         }
 
@@ -1854,8 +1873,18 @@ app.get('/dashboard', requireAuth, async (req, res) => {
             chatOffset = 0;
             document.getElementById('chat-empty').style.display = 'none';
             document.getElementById('chat-area').style.display = 'flex';
-            document.getElementById('chat-header-name').innerText = (nameDisplay || phone) + " (v1.1)";
-            document.getElementById('chat-messages').innerHTML = '<div style="text-align:center; padding:20px; color:#94a3b8;">Loading...</div>';
+            document.getElementById('chat-header-name').innerText = nameDisplay || phone;
+            
+            // Show cached messages instantly if available
+            var cacheKey = 'inbox_chat_' + phone;
+            var cachedHtml = localStorage.getItem(cacheKey);
+            var chatBox = document.getElementById('chat-messages');
+            if (cachedHtml) {
+                chatBox.innerHTML = cachedHtml;
+                chatBox.scrollTop = chatBox.scrollHeight;
+            } else {
+                chatBox.innerHTML = '<div style="text-align:center; padding:20px; color:#94a3b8;">Loading...</div>';
+            }
             
             // Highlight selected
             document.querySelectorAll('.conversation-item').forEach(function(el) { el.classList.remove('active'); });
@@ -1868,8 +1897,7 @@ app.get('/dashboard', requireAuth, async (req, res) => {
             loadConversations();
 
             try {
-                var url = '/admin/inbox/messages/' + encodeURIComponent(phone) + '?limit=' + chatLimit + '&offset=' + 0;
-                console.log("[Inbox] Opening chat, fetching latest messages:", url);
+                var url = '/admin/inbox/messages/' + encodeURIComponent(phone) + '?limit=' + chatLimit + '&offset=0';
                 var res = await fetch(url);
                 var messages = await res.json();
                 
@@ -1887,11 +1915,17 @@ app.get('/dashboard', requireAuth, async (req, res) => {
                     chatHtml = '<div style="text-align:center; padding:20px; color:var(--danger);">Error: ' + (messages.error || 'Failed to load messages') + '</div>';
                 }
                 
-                var chatBox = document.getElementById('chat-messages');
                 chatBox.innerHTML = chatHtml;
                 chatBox.scrollTop = chatBox.scrollHeight;
+                
+                // Cache the rendered HTML for instant loading next time
+                try { localStorage.setItem(cacheKey, chatHtml); } catch(e) {}
             } catch (e) {
                 console.error("Failed to load chat history", e);
+                // If fetch failed but we have cache, keep showing cached version
+                if (!cachedHtml) {
+                    chatBox.innerHTML = '<div style="text-align:center; padding:20px; color:var(--danger);">Failed to load. Check connection.</div>';
+                }
             }
         }
 
