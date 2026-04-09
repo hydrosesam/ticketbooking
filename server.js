@@ -288,7 +288,7 @@ app.get('/admin/inbox/messages/:phone', requireAuth, async (req, res) => {
             "SELECT * FROM mn_messages WHERE phone = ? ORDER BY timestamp DESC LIMIT ? OFFSET ?",
             [req.params.phone, limit, offset]
         );
-        // Return latest messages first in DESC, frontend will reverse them for display
+        console.log(`[Inbox API] Fetched ${rows.length} messages for ${req.params.phone} (Limit: ${limit}, Offset: ${offset})`);
         res.json(rows);
     } catch (err) {
         res.status(500).json({ error: err.message });
@@ -1604,14 +1604,18 @@ app.get('/dashboard', requireAuth, async (req, res) => {
             var btn = document.getElementById('btn-load-more');
             if (!btn || !activeChatPhone) return;
             
+            console.log("[Inbox] Loading previous messages...", { phone: activeChatPhone, offset: chatOffset + chatLimit });
             btn.disabled = true;
             btn.innerText = 'Loading...';
             
             chatOffset += chatLimit;
             try {
-                var res = await fetch('/admin/inbox/messages/' + activeChatPhone + '?limit=' + chatLimit + '&offset=' + chatOffset);
+                var url = '/admin/inbox/messages/' + encodeURIComponent(activeChatPhone) + '?limit=' + chatLimit + '&offset=' + chatOffset;
+                console.log("[Inbox] Fetching URL:", url);
+                var res = await fetch(url);
                 var messages = await res.json();
-                
+                console.log("[Inbox] Data received:", Array.isArray(messages) ? messages.length + " rows" : "Error/Non-array");
+
                 var chatBox = document.getElementById('chat-messages');
                 var oldHeight = chatBox.scrollHeight;
 
@@ -1620,21 +1624,18 @@ app.get('/dashboard', requireAuth, async (req, res) => {
                     return;
                 }
 
-                // Messages arrive DESC (latest first). To prepend in order, we reverse to ASC.
-                var newHtml = '';
+                // Messages arrive DESC (latest first). We reverse to ASC [Oldest -> Newest]
+                // and insert them BEFORE the message that was previously at the top.
+                var referenceNode = btn.nextSibling; 
                 messages.reverse().forEach(function(msg) {
-                    newHtml += renderMessageBubble(msg);
+                    var temp = document.createElement('div');
+                    temp.innerHTML = renderMessageBubble(msg);
+                    chatBox.insertBefore(temp.firstChild, referenceNode);
                 });
-
-                var tempDiv = document.createElement('div');
-                tempDiv.innerHTML = newHtml;
-                // Insert after the button
-                while (tempDiv.firstChild) {
-                    chatBox.insertBefore(tempDiv.firstChild, btn.nextSibling);
-                }
 
                 // Adjust scroll to maintain position
                 chatBox.scrollTop = chatBox.scrollHeight - oldHeight;
+                console.log("[Inbox] UI updated, scroll adjusted.");
                 
                 if (messages.length < chatLimit) btn.style.display = 'none';
                 else {
@@ -1642,7 +1643,7 @@ app.get('/dashboard', requireAuth, async (req, res) => {
                     btn.innerText = 'Load Previous (20)';
                 }
             } catch (e) {
-                console.error("Load previous error", e);
+                console.error("[Inbox] Load previous error:", e);
                 btn.disabled = false;
                 btn.innerText = 'Retry Load';
             }
@@ -1865,7 +1866,9 @@ app.get('/dashboard', requireAuth, async (req, res) => {
             loadConversations();
 
             try {
-                var res = await fetch('/admin/inbox/messages/' + phone + '?limit=' + chatLimit + '&offset=0');
+                var url = '/admin/inbox/messages/' + encodeURIComponent(phone) + '?limit=' + chatLimit + '&offset=' + 0;
+                console.log("[Inbox] Opening chat, fetching latest messages:", url);
+                var res = await fetch(url);
                 var messages = await res.json();
                 
                 var chatHtml = '';
